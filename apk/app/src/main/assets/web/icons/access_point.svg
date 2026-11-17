@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- C 类：墙支架 / 接入点 — 40cm 红色正方形框 + 中心点 -->
+  <!-- 红色边框正方形（俯视墙壁上的支架） -->
+  <rect x="6" y="6" width="52" height="52" fill="none" stroke="#E53935" stroke-width="6" stroke-linejoin="miter"/>
+  <!-- 内部淡红填充 -->
+  <rect x="6" y="6" width="52" height="52" fill="#E53935" fill-opacity="0.08"/>
+  <!-- 中心定位点 -->
+  <circle cx="32" cy="32" r="4" fill="#E53935"/>
+</svg>

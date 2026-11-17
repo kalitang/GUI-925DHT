@@ -11,8 +11,8 @@
 | 版本 | 载体 | 下载 |
 |------|------|------|
 | **GUI 源码版** | Python 源码 | 克隆本仓库后 `python main.py` |
-| **Windows EXE 版** | 单文件 EXE（175 MB） | [Releases 页面](https://github.com/kalitang/PowerCollector/releases) 下载 `电力低压数据采集软件.exe` |
-| **Android APK 版** | APK（67 MB） | [Releases 页面](https://github.com/kalitang/PowerCollector/releases) 下载 `电力低压数据采集软件.apk` |
+| **Windows EXE 版** | 单文件 EXE（175 MB） | [Releases 页面](https://github.com/kalitang/GUI-925DHT/releases) 下载 `电力低压数据采集软件.exe` |
+| **Android APK 版** | APK（67 MB） | [Releases 页面](https://github.com/kalitang/GUI-925DHT/releases) 下载 `电力低压数据采集软件.apk` |
 
 - EXE 版免安装，双击即用；内置《低压客户模板.xls》。
 - APK 版已用 v2 方案签名，Android 7.0+ 可直接安装；使用「导入压缩包」或「打开目录」加载数据。

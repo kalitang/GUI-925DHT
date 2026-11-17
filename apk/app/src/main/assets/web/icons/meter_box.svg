@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- D 类：计量箱（用户电表）— 20cm 宽 × 40cm 高 长方形，蓝色边框 -->
+  <!-- 60px 宽 × 60px 高 = 等比 1:2 长方形。但真实尺寸是 1:2 (20:40)，画布 64x64 → 取 32×52（居中） -->
+  <!-- 等比 1:2 长方形：宽 = 高 / 2。若画布 64x64，长方形 32x52 占满高度，居中 -->
+  <rect x="16" y="6" width="32" height="52" fill="#1565C0" fill-opacity="0.1" stroke="#1565C0" stroke-width="6" stroke-linejoin="miter"/>
+  <!-- 中间横线（电表计量窗口） -->
+  <line x1="20" y1="32" x2="44" y2="32" stroke="#1565C0" stroke-width="1.5" stroke-opacity="0.6"/>
+  <!-- 顶部小标签区 -->
+  <rect x="22" y="14" width="20" height="6" fill="none" stroke="#1565C0" stroke-width="1" stroke-opacity="0.5"/>
+  <!-- 中心定位点 -->
+  <circle cx="32" cy="32" r="3" fill="#1565C0"/>
+</svg>

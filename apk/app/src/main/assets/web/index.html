@@ -1,0 +1,3268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>电力低压数据采集 - 3D地球</title>
+<link rel="stylesheet" href="Widgets.css">
+<style>
+  html, body, #cesiumContainer { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background:#000; font-family: "Microsoft YaHei", sans-serif; }
+  #loading { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#fff; font-size:18px; z-index:999; }
+  #toolbar { position:absolute; top:10px; left:10px; background:rgba(20,30,48,0.85); padding:10px 14px; border-radius:6px; color:#fff; z-index:10; max-width:300px; font-size:13px; }
+  #toolbar b { color:#f1c40f; }
+  #stats { position:absolute; bottom:10px; right:10px; background:rgba(20,30,48,0.7); padding:6px 10px; border-radius:4px; color:#fff; font-size:12px; z-index:10; font-family:monospace; }
+  .cesium-viewer-bottom { display:none !important; }
+  .device-info { font-size:13px; line-height:1.6; }
+  .device-info b { color:#f1c40f; }
+
+  /* === 比例尺（屏幕左下角）=== */
+  #scalebar {
+    position:absolute; left:10px; bottom:10px; z-index:11;
+    background:rgba(20,30,48,0.78); color:#fff;
+    padding:6px 10px; border-radius:4px; font-family:monospace;
+    font-size:11px; line-height:1; user-select:none;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  #scalebar .bar { background:#fff; height:3px; border-radius:1px; }
+  #scalebar .label { display:flex; justify-content:space-between; }
+
+  /* === IP 定位按钮（屏幕右上，紧贴图例原位置）=== 用户 2026-09-28 */
+  #btn-ip-locate {
+    position:absolute; right:10px; top:10px; z-index:11;
+    background:rgba(20,30,48,0.78); color:#f1c40f;
+    border:1px solid rgba(241,196,15,0.5); border-radius:6px;
+    padding:8px 14px; font-size:13px; font-family:"Microsoft YaHei";
+    cursor:pointer; user-select:none;
+    box-shadow:0 4px 16px rgba(0,0,0,0.4);
+  }
+  #btn-ip-locate:hover { background:rgba(241,196,15,0.18); }
+  #btn-ip-locate:active { background:rgba(241,196,15,0.32); }
+
+  /* === 罗盘（屏幕右下角）=== 用户 2026-09-28：IP 定位 + 方位辨别 */
+  #compass {
+    position:absolute; right:120px; bottom:10px; z-index:11;
+    width:100px; padding:6px 8px;
+    background:rgba(20,30,48,0.78); color:#fff;
+    border-radius:50px; user-select:none;
+    font-family:monospace; text-align:center;
+    box-shadow:0 4px 16px rgba(0,0,0,0.4);
+  }
+  #compass-svg { display:block; margin:0 auto; }
+  #compass-info {
+    font-size:10px; line-height:1; margin-top:2px; color:#aaa;
+  }
+
+  /* === 图例（屏幕右上）=== */
+  #legend {
+    position:absolute; top:10px; right:10px; z-index:11;
+    background:rgba(20,30,48,0.85); color:#fff;
+    padding:10px 12px; border-radius:6px;
+    font-size:12px; min-width:160px;
+    backdrop-filter:blur(4px);
+  }
+  #legend h4 { margin:0 0 6px; font-size:12px; color:#f1c40f; letter-spacing:0.5px; }
+  #legend .row { display:flex; align-items:center; gap:6px; padding:2px 0; }
+  #legend .sw { width:18px; height:14px; display:inline-block; border-radius:2px;
+    background:#fff; border:1px solid rgba(255,255,255,0.3); }
+  #legend .label-count { margin-left:auto; color:#aaa; font-family:monospace; }
+
+  /* === 快捷键提示（屏幕底部居中）=== */
+  #hotkey-hint {
+    position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+    z-index:11; background:rgba(20,30,48,0.78); color:#fff;
+    padding:6px 14px; border-radius:4px; font-size:11px;
+    display:flex; gap:14px; user-select:none; pointer-events:none;
+    opacity:0.85; transition:opacity 0.3s;
+  }
+  #hotkey-hint.faded { opacity:0.35; }
+  #hotkey-hint kbd {
+    background:rgba(241,196,15,0.18); border:1px solid rgba(241,196,15,0.4);
+    border-radius:3px; padding:1px 5px; font-family:monospace; font-size:10px;
+    color:#f1c40f; margin-right:3px;
+  }
+
+  /* === 快捷搜索面板（按 / 触发）=== */
+  #quick-search {
+    position:absolute; top:50px; left:50%; transform:translateX(-50%);
+    z-index:30; background:rgba(20,30,48,0.96); color:#fff;
+    padding:10px 14px; border-radius:6px; width:360px;
+    border:1px solid rgba(241,196,15,0.4); box-shadow:0 6px 24px rgba(0,0,0,0.6);
+    display:none;
+  }
+  #quick-search.show { display:block; }
+  #quick-search input {
+    width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.2);
+    color:#fff; padding:6px 10px; border-radius:3px; font-size:13px;
+    box-sizing:border-box;
+  }
+  #quick-search input:focus { outline:none; border-color:#f1c40f; }
+  #quick-search .hint { color:#aaa; font-size:11px; margin-top:6px; }
+  #quick-search .results {
+    margin-top:6px; max-height:200px; overflow-y:auto;
+    background:rgba(0,0,0,0.2); border-radius:3px;
+  }
+  #quick-search .results .item {
+    padding:5px 8px; cursor:pointer; font-size:12px;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  #quick-search .results .item:hover, #quick-search .results .item.active {
+    background:rgba(241,196,15,0.15);
+  }
+  #quick-search .results .item .meta { color:#888; font-size:10px; font-family:monospace; }
+  #quick-search .results .item .badge {
+    display:inline-block; padding:1px 5px; border-radius:2px;
+    font-size:10px; margin-left:4px;
+  }
+  #quick-search .results .item .badge.tx { background:#c0392b; color:#fff; }
+  #quick-search .results .item .badge.pole { background:#7f8c8d; color:#fff; }
+  #quick-search .results .item .badge.ap { background:#e53935; color:#fff; }
+  #quick-search .results .item .badge.box { background:#1565C0; color:#fff; }
+  #quick-search .empty { padding:12px; color:#888; text-align:center; font-size:12px; }
+
+  /* === 设备详情弹窗增强 === */
+  #devDetail {
+    display:none; position:absolute; top:60px; right:10px; width:300px;
+    background:rgba(20,30,48,0.96); border:1px solid rgba(241,196,15,0.5);
+    border-radius:8px; padding:12px 14px; color:#fff; z-index:20;
+    font-size:13px; line-height:1.7; box-shadow:0 4px 24px rgba(0,0,0,0.6);
+    max-height:80vh; overflow-y:auto;
+  }
+  #devDetail .dev-detail-title {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:8px; padding-bottom:8px;
+    border-bottom:1px solid rgba(241,196,15,0.25);
+  }
+  #devDetail .dev-detail-title .name {
+    font-size:15px; font-weight:bold; color:#f1c40f;
+  }
+  #devDetail .dev-detail-title .close {
+    cursor:pointer; font-size:20px; color:#888; line-height:1;
+    padding:0 6px;
+  }
+  #devDetail .dev-detail-title .close:hover { color:#fff; }
+  #devDetail .dev-detail-actions {
+    display:flex; gap:6px; margin:8px 0; flex-wrap:wrap;
+  }
+  #devDetail .dev-detail-actions button {
+    flex:1; min-width:80px;
+    background:rgba(241,196,15,0.12); color:#f1c40f;
+    border:1px solid rgba(241,196,15,0.35); border-radius:3px;
+    padding:5px 8px; cursor:pointer; font-size:11px;
+    font-family:inherit; transition:all 0.15s;
+  }
+  #devDetail .dev-detail-actions button:hover {
+    background:rgba(241,196,15,0.28); color:#fff;
+  }
+  #devDetail .dev-detail-actions button.primary {
+    background:#f1c40f; color:#1c2833;
+  }
+  #devDetail .dev-detail-actions button.primary:hover {
+    background:#fff; color:#1c2833;
+  }
+  #devDetail .toast {
+    position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+    background:rgba(241,196,15,0.95); color:#1c2833;
+    padding:3px 10px; border-radius:3px; font-size:11px;
+    opacity:0; transition:opacity 0.25s; pointer-events:none;
+  }
+  #devDetail .toast.show { opacity:1; }
+
+  /* === 全局提示条（户表批量等 Python→JS 调用） === */
+  #globalToast {
+    position:fixed; top:16px; left:50%; transform:translateX(-50%) translateY(-8px);
+    background:rgba(28,40,51,0.94); color:#fff;
+    padding:9px 18px; border-radius:5px; font-size:13px;
+    border-left:3px solid #f1c40f;
+    box-shadow:0 4px 18px rgba(0,0,0,0.35);
+    opacity:0; transition:opacity .25s, transform .25s;
+    pointer-events:none; z-index:9999; max-width:70vw; white-space:pre-wrap;
+  }
+  #globalToast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* === 右键上下文菜单 === */
+  #context-menu {
+    position:absolute; z-index:40; display:none;
+    background:rgba(20,30,48,0.96); color:#fff;
+    border:1px solid rgba(241,196,15,0.4); border-radius:4px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.6);
+    min-width:160px; padding:4px 0; font-size:13px;
+  }
+  #context-menu.show { display:block; }
+  #context-menu .item {
+    padding:7px 14px; cursor:pointer; display:flex; align-items:center; gap:8px;
+  }
+  #context-menu .item:hover { background:rgba(241,196,15,0.25); }
+  #context-menu .item .shortcut { margin-left:auto; color:#888; font-size:11px; font-family:monospace; }
+  #context-menu .sep { height:1px; background:rgba(255,255,255,0.1); margin:4px 0; }
+  #context-menu .item.disabled { color:#555; cursor:default; }
+  #context-menu .item.disabled:hover { background:transparent; }
+</style>
+</head>
+<body>
+<div id="loading">正在加载 3D 地球…</div>
+<div id="cesiumContainer"></div>
+<div id="toolbar" style="display:none">
+  <div><b>电力低压数据采集系统</b></div>
+  <div>设备：<span id="toolbar-count">0</span> 个</div>
+  <div>时区：<span id="toolbar-tz">-</span></div>
+</div>
+<div id="stats">瓦片缓存：<span id="stats-info">加载中…</span><br>
+  <span id="coords-info">经纬度：-</span>
+</div>
+<!-- 设备详情弹窗 -->
+<div id="devDetail">
+  <div class="dev-detail-title">
+    <span class="name" id="devDetail-title">—</span>
+    <span class="close" id="devDetail-close">&times;</span>
+  </div>
+  <div id="devDetail-body"></div>
+  <div class="dev-detail-actions" id="devDetail-actions"></div>
+  <div class="toast" id="devDetail-toast">已复制坐标</div>
+</div>
+
+<!-- 全局提示条（户表批量等 Python 侧调用 PowerAPI.toast） -->
+<div class="global-toast" id="globalToast"></div>
+
+<!-- 浮动按钮：IP 定位（地图右上） — 用户 2026-09-28：IP 定位 + 导航 -->
+<button id="btn-ip-locate" title="按 IP 定位当前位置（飞行到 PC 网络出口经纬度）">
+  📍 IP 定位
+</button>
+
+<!-- 罗盘（HUD，右下角） — 用户 2026-09-28：IP 定位标记的位置同步显示罗盘方便方位辨别 -->
+<div id="compass" title="相机朝向罗盘（外环旋转）+ IP 定位位置箭头（指向 PC_Location）">
+  <svg id="compass-svg" viewBox="-50 -50 100 100" width="100" height="100">
+    <!-- 外圈 -->
+    <circle cx="0" cy="0" r="46" fill="rgba(20,30,48,0.78)" stroke="rgba(241,196,15,0.5)" stroke-width="1.2"/>
+    <!-- 旋转内容组（外圈随相机 heading 旋转） -->
+    <g id="compass-ring">
+      <!-- N/E/S/W 标 -->
+      <text x="0"  y="-32" text-anchor="middle" font-size="10" font-weight="bold" fill="#f1c40f">N</text>
+      <text x="32" y="3"   text-anchor="middle" font-size="9"  fill="#fff">E</text>
+      <text x="0"  y="38"  text-anchor="middle" font-size="9"  fill="#fff">S</text>
+      <text x="-32" y="3"  text-anchor="middle" font-size="9"  fill="#fff">W</text>
+      <!-- N 箭头 -->
+      <polygon points="0,-26 -5,-12 0,-15 5,-12" fill="#f1c40f" stroke="#000" stroke-width="0.4"/>
+    </g>
+    <!-- IP 位置箭头（不动，指向当前 PC_LOCATION 的方位，由 ipHeadingDeg 旋转） -->
+    <g id="compass-ip-arrow">
+      <polygon points="0,-40 -4,-28 0,-32 4,-28" fill="#2F9BFF" stroke="#fff" stroke-width="0.6" opacity="0.9"/>
+      <text x="0" y="-44" text-anchor="middle" font-size="8" fill="#2F9BFF" font-weight="bold">IP</text>
+    </g>
+    <!-- 中心点 -->
+    <circle cx="0" cy="0" r="2.5" fill="#000" stroke="#fff" stroke-width="1"/>
+  </svg>
+  <div id="compass-info">—</div>
+</div>
+
+<!-- 比例尺 -->
+<div id="scalebar" title="当前视距下的地面采样距离（GSD）">
+  <div class="bar" id="scalebar-bar" style="width:100px"></div>
+  <div class="label">
+    <span id="scalebar-mid">—</span>
+    <span id="scalebar-gsd">—</span>
+  </div>
+</div>
+
+<!-- 图例已删除（用户 2026-09-28 要求：删除地图显示窗口的设备图例栏） -->
+
+<!-- 变压器脉冲环 overlay（纯 2D canvas，不走 WebGL，保证低配机也能画）-->
+<canvas id="tx-pulse-canvas" style="position:absolute;left:0;top:0;z-index:5;pointer-events:none"></canvas>
+
+<!-- 快捷搜索面板（按 / 触发）-->
+<div id="quick-search" role="dialog" aria-label="快速搜索">
+  <input id="qs-input" type="text" placeholder="搜索台区名 / 设备名 / 经纬度…（Enter 跳转，↑↓ 选择，Esc 关闭）" autocomplete="off" spellcheck="false" />
+  <div class="hint" id="qs-hint">输入关键词实时匹配设备与台区</div>
+  <div class="results" id="qs-results"></div>
+</div>
+
+<!-- 右键上下文菜单 -->
+<div id="context-menu"></div>
+
+<!-- 底部快捷键提示 -->
+<div id="hotkey-hint">
+  <span><kbd>R</kbd>重置视角</span>
+  <span><kbd>F</kbd>聚焦选中</span>
+  <span><kbd>I</kbd>IP 定位</span>
+  <span><kbd>/</kbd>搜索</span>
+  <span><kbd>L</kbd>连线</span>
+  <span><kbd>H</kbd>隐藏名称</span>
+  <span><kbd>+</kbd>/<kbd>-</kbd>缩放</span>
+  <span><kbd>Esc</kbd>关闭弹窗</span>
+</div>
+
+<script>
+  // === Cesium 静态资源（workers/assets/widgets）从本地加载 ===
+  // CESIUM_BASE_URL 必须设为 "/"（绝对根路径），不能是空字符串：
+  //   Cesium 1.131 把空字符串解析为当前页面 URL，组装成
+  //   "/web/index.html/Assets/approximateTerrainHeights.json" 这种路径 → 404
+  //   导致渲染崩溃、所有 billboard 不可见（地图上看不到设备图标）。
+  //   设为 "/" 后，Cesium 请求 /Assets/... /Workers/... 直接命中 tile_proxy 的 _serve_static。
+  window.CESIUM_BASE_URL = "/";
+</script>
+<script src="proxy_info.js"></script>
+<script src="Cesium.js"></script>
+
+<script>
+// ============== 配置 ==============
+const PROXY = (window.TILE_PROXY || '/tiles');   // 瓦片走本地代理
+const ICON_BASE = '/icons';   // SVG 图标（由本地代理托管）
+// 注意：CESIUM_BASE_URL 已在 head 第一个 script 块设为 "/"（绝对根路径），这里不能再覆盖
+
+// 强制不加载 Cesium ion 资产（避免 token 弹窗）
+Cesium.Ion.defaultAccessToken = '';
+
+// ============== 性能配置（用户可切换 + 自动探测） =============
+// perfLevel: -1=自动(默认) 0=省资源(核显) 1=平衡 2=全效(独显)
+// 设计原则：默认关掉所有耗 GPU 的特效（大气/光照/阴影/抗锯齿），
+// 保证核显/老旧电脑也能流畅；独显用户可手动切"全效"。
+// 瓦片实时加载 → 本地代理自动缓存（tile_proxy），首屏拉取后永久本地。
+
+// 自动探测显卡型号 → 决定默认档位
+function detectPerfLevel() {
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (!gl) return 0;   // 无 WebGL → 强制省资源
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!ext) return 1;
+    const gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toUpperCase();
+    // 独显特征
+    if (gpu.includes('NVIDIA') || gpu.includes('AMD') && gpu.includes('RX') || gpu.includes('ARC') || gpu.includes('RADEON')) {
+      return 2;   // 独显 → 全效
+    }
+    // 核显特征（Intel UHD / Iris / 集成）
+    if (gpu.includes('INTEL') || gpu.includes('UHD') || gpu.includes('IRIS') || gpu.includes('HD GRAPHICS')) {
+      return 0;   // 核显 → 省资源
+    }
+    // 兜底
+    return 1;
+  } catch (e) {
+    return 0;   // 探测失败 → 省资源（保守）
+  }
+}
+
+// 性能配置：所有档位都关大气/光照/阴影（这些是 GPU 大户）
+// 只有"全效"档开 MSAA + FXAA（独显才扛得住）
+const PERF_CONFIG = {
+  0: {  // 省资源（核显/老旧）：分辨率 0.6，关所有特效；星空保留（一次静态贴图，开销极低）
+    resolutionScale: 0.6,
+    fxaa: false,
+    msaa: 1,
+    atmosphere: false,
+    groundAtmosphere: false,
+    enableLighting: false,
+    dynamicAtmosphereLighting: false,
+    depthTestAgainstTerrain: false,
+    showLabelsLayer: false,
+    sun: false, moon: false, skyAtmosphere: false, skyBox: true,
+    showGroundAtmosphere: false,
+    fog: false,
+    maxBillboardImageSize: 18,
+    clusterMinDistance: 12000,
+    _label: "省资源（核显）",
+  },
+  1: {  // 平衡：分辨率 0.85，保留基础光照 + 星空
+    resolutionScale: 0.85,
+    fxaa: false,
+    msaa: 1,
+    atmosphere: false,
+    groundAtmosphere: false,
+    enableLighting: true,
+    dynamicAtmosphereLighting: false,
+    depthTestAgainstTerrain: false,
+    showLabelsLayer: true,
+    sun: true, moon: false, skyAtmosphere: false, skyBox: true,
+    showGroundAtmosphere: false,
+    fog: false,
+    maxBillboardImageSize: 26,
+    clusterMinDistance: 6000,
+    _label: "平衡",
+  },
+  2: {  // 全效（独显）：全开抗锯齿 + 大气 + 阴影 + 星空
+    resolutionScale: 1.0,
+    fxaa: true,
+    msaa: 4,
+    atmosphere: true,
+    groundAtmosphere: true,
+    enableLighting: true,
+    dynamicAtmosphereLighting: true,
+    depthTestAgainstTerrain: false,
+    showLabelsLayer: true,
+    sun: true, moon: true, skyAtmosphere: true, skyBox: true,
+    showGroundAtmosphere: true,
+    fog: false,
+    maxBillboardImageSize: 32,
+    clusterMinDistance: 3000,
+    _label: "全效（独显）",
+  },
+};
+
+// 启动时自动探测 → 设默认档位；localStorage 里有用户手动选择就覆盖
+let perfLevel = localStorage.getItem('perfLevel') !== null
+  ? parseInt(localStorage.getItem('perfLevel'))
+  : detectPerfLevel();
+if (perfLevel < 0 || perfLevel > 2 || isNaN(perfLevel)) perfLevel = 1;
+function getPerf() { return PERF_CONFIG[perfLevel] || PERF_CONFIG[1]; }
+
+// 启动时构建一次 skyBox（Cesium 默认无），按需保留或丢弃
+// (在 viewer 创建后由 applyPerf() 接管)
+
+function applyPerf() {
+  const p = getPerf();
+  if (viewer) {
+    viewer.resolutionScale = p.resolutionScale;
+    const stage = viewer.scene.postProcessStages.fxaa;
+    if (stage) stage.enabled = p.fxaa;
+    if (viewer.scene.msaaSamples !== p.msaa) {
+      // msaaSamples 改了需要重建 scene（Cesium 限制），不重建就忽略
+      viewer.scene.msaaSamples = p.msaa;
+    }
+    viewer.scene.skyAtmosphere.show = p.skyAtmosphere;
+    viewer.scene.sun.show = p.sun;
+    viewer.scene.moon.show = p.moon;
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = p.skyBox;
+    viewer.scene.fog.enabled = p.fog;
+    viewer.scene.globe.enableLighting = p.enableLighting;
+    viewer.scene.globe.dynamicAtmosphereLighting = p.dynamicAtmosphereLighting;
+    viewer.scene.globe.dynamicAtmosphereLightingFromSun = p.dynamicAtmosphereLighting;
+    viewer.scene.globe.showGroundAtmosphere = p.showGroundAtmosphere;
+    viewer.scene.globe.depthTestAgainstTerrain = p.depthTestAgainstTerrain;
+    viewer.scene.requestRender();
+  }
+}
+
+// 暴露给 Python 侧查询当前档位 + 显卡型号
+window.getPerfInfo = function() {
+  let gpu = "未知";
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+    }
+  } catch (e) {}
+  return {
+    perfLevel: perfLevel,
+    gpu: gpu,
+    auto: detectPerfLevel(),
+    labels: [PERF_CONFIG[0]._label, PERF_CONFIG[1]._label, PERF_CONFIG[2]._label],
+  };
+};
+
+window.setPerfLevel = function(lv) {
+  perfLevel = lv;
+  localStorage.setItem('perfLevel', String(lv));
+  applyPerf();
+  // 注记层显隐
+  if (labelLayer && baseLayer) {
+    labelLayer.show = getPerf().showLabelsLayer;
+    baseLayer.show = true;
+  }
+};
+
+// ============== 初始化 Viewer ==============
+const viewer = new Cesium.Viewer('cesiumContainer', {
+  baseLayer: false,
+  geocoder: false,
+  homeButton: false,
+  // 程序仅使用 3D — 去掉 2D/3D 切换控件
+  sceneModePicker: false,
+  baseLayerPicker: false,
+  navigationHelpButton: false,
+  animation: false,
+  timeline: false,
+  fullscreenButton: true,
+  // 关键：低内存设备关闭内置 infoBox（避免 1020 个 entity 弹窗占用 DOM 内存）
+  // 用户可点 entity 通过窗口标题/外部 UI 看信息
+  infoBox: false,
+  selectionIndicator: false,
+  shouldAnimate: false,
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+  // 关键修复：requestRenderMode + 不要 maximumRenderTimeChange
+  // （maximumRenderTimeChange 会强制每帧渲染，抵消 requestRenderMode 的省 GPU 效果 → 卡顿）
+  requestRenderMode: true,
+  // 强制 Cesium 不停掉 render loop（swiftshader 渲染出错时 Cesium 会自动停止）
+  useDefaultRenderLoop: true,
+});
+// 星空背景：默认所有档位开启（贴图 Assets/Textures/SkyBox 已本地化，零网络开销）
+// requestRenderMode 下 skyBox 不会自动重绘 → 创建后显式 requestRender
+viewer.scene.skyBox.show = getPerf().skyBox;
+applyPerf();   // 应用当前性能档位
+
+// 相机移动时强制重绘（requestRenderMode 下手动触发）— 只订阅 moveEnd，不订阅 changed
+// changed 在每帧内部都触发，会导致每帧都重绘，违背省 GPU 初衷
+viewer.camera.moveEnd.addEventListener(() => { viewer.scene.requestRender(); });
+
+// GPU 自动降分辨率（老旧电脑自适应）：低频采样（每 2 秒 1 次），不要每帧都跑
+let _autoScale = 1.0;
+let _lastFpsSample = 0;
+let _lastAutoAdjust = 0;
+viewer.scene.postRender.addEventListener(() => {
+  const now = Date.now();
+  if (now - _lastAutoAdjust < 2000) return;   // 节流：每 2 秒最多调整 1 次
+  _lastAutoAdjust = now;
+  const fps = viewer.scene.fps;
+  if (fps > 0) {
+    if (fps < 18) _autoScale = Math.max(0.5, _autoScale - 0.05);
+    else if (fps > 45 && _autoScale < 1.0) _autoScale = Math.min(1.0, _autoScale + 0.02);
+  }
+  const target = Math.min(getPerf().resolutionScale, _autoScale);
+  if (Math.abs(viewer.resolutionScale - target) > 0.05) {
+    viewer.resolutionScale = target;
+    viewer.scene.requestRender();
+  }
+});
+// 程序仅 3D — morph 事件不会再触发，保留兜底即可
+viewer.scene.morphComplete.addEventListener(() => {
+  viewer.scene.requestRender();
+});
+// 图标始终在最上层（不做深度测试）
+viewer.scene.globe.depthTestAgainstTerrain = false;
+
+// === requestRenderMode 下首次渲染触发：Cesium 初始化完默认不渲染 ===
+viewer.camera.flyTo({
+  destination: Cesium.Cartesian3.fromDegrees(119.5, 29.8, 25000),
+  duration: 0,
+});
+viewer.scene.requestRender();
+// 等 globe 显示瓦片后再渲染一次（避免首屏黑）
+viewer.scene.globe.tileLoadProgressEvent.addEventListener((count) => {
+  if (count === 0) viewer.scene.requestRender();
+});
+// Cesium 完全初始化后再触发一次（防止首屏黑）：
+// 1. 等 3 秒兜底触发（此时 Cesium 内部已初始化完）
+// 2. clock.onTick 默认每帧触发，关掉它避免持续消耗
+setTimeout(() => { viewer.scene.requestRender(); }, 3000);
+
+// === 时区：根据浏览器时区设置当前时间 ===
+function applyLocalTime() {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('toolbar-tz') && (document.getElementById('toolbar-tz').textContent = tz);
+  viewer.clock.currentTime = Cesium.JulianDate.now();
+  viewer.clock.shouldAnimate = false;  // 太阳位置仍实时，但 clock 不持续 tick
+  // 手动每分钟刷新一次（太阳移动很慢）
+  setInterval(() => {
+    viewer.clock.currentTime = Cesium.JulianDate.now();
+  }, 60000);
+}
+applyLocalTime();
+
+// ============== 影像底图（ArcGIS World Imagery via 本地代理）==============
+// 低内存设备：只加载一个底图层（卫星图），不再加载注记层（双倍请求太卡）
+const baseLayer = viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+  url: `${PROXY}/imagery/{z}/{x}/{y}`,
+  credit: 'Esri World Imagery (本地缓存)',
+  maximumLevel: 19,
+  tilingScheme: new Cesium.WebMercatorTilingScheme(),
+}));
+// labelLayer 占位（低配档不加载，仅 API 需要存在）
+let labelLayer = null;
+
+// ============== 图标：每个类型独立 PNG（不再用 atlas）==================
+// 用户 2026-09-26 指定：
+//   A 变压器  → 保持不变（红橙色圆柱俯视/立面组合）
+//   B 杆塔    → 40cm 直径灰色圆盘俯视
+//   C 墙支架  → 40cm 红色正方形框
+//   D 计量箱  → 20cm × 40cm 蓝色长方形
+// 所有图标按真实世界尺寸（米）在地图上渲染：相机高度变化时缩放保持物理准确
+const ICON_SOURCES = {
+  '柱上变（变压器）': 'transformer.svg',
+  '接入点（墙支架）': 'access_point.svg',
+  '杆塔': 'pole.svg',
+  '计量箱': 'meter_box.svg',
+  '其他': 'other.svg',
+};
+
+// 真实世界尺寸（米）。与 excel_loader.SIZE_M 一致。
+const REAL_SIZE_M = {
+  '柱上变（变压器）': { w: 1.2, h: 1.2 },   // 1.2m × 1.2m
+  '杆塔':            { w: 0.4, h: 0.4 },   // 直径 40cm
+  '接入点（墙支架）': { w: 0.4, h: 0.4 },   // 40cm × 40cm
+  '计量箱':          { w: 0.2, h: 0.4 },   // 20cm × 40cm
+  '其他':            { w: 0.3, h: 0.3 },   // 默认 30cm
+};
+
+// SVG 画布统一 64×64，但几何（宽高比）按真实尺寸裁切绘制到 PNG canvas
+// 例如：计量箱 20×40 → PNG canvas 是 32×64（保持 1:2 长方形）
+const TYPE_ORDER = ['柱上变（变压器）', '接入点（墙支架）', '杆塔', '计量箱', '其他'];
+
+// 每个类型独立缓存：type → { image, pxW, pxH }，image 是已绘制到 canvas 的 PNG（已按真实长宽比缩放）
+const typeImages = {};   // type → HTMLImageElement（PNG dataURL）
+let iconsReady = false;
+
+// 并行加载所有 SVG → 绘制到 canvas（按真实宽高比缩放）→ 转 dataURL → 装载到 Image
+async function buildIcons() {
+  const tasks = TYPE_ORDER.map(async (type) => {
+    const fname = ICON_SOURCES[type];
+    try {
+      const svgText = await fetch(`${ICON_BASE}/${fname}`).then(r => r.text());
+      if (!svgText || svgText.length < 100) throw new Error(`SVG too small: ${fname}`);
+      const blob = new Blob([svgText], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      URL.revokeObjectURL(url);
+      // canvas 按真实宽高比：长方形 vs 正方形
+      const sz = REAL_SIZE_M[type] || { w: 0.4, h: 0.4 };
+      const pxW = Math.max(16, Math.round(64 * sz.w / Math.max(sz.w, sz.h)));
+      const pxH = Math.max(16, Math.round(64 * sz.h / Math.max(sz.w, sz.h)));
+      const c = document.createElement('canvas');
+      c.width = pxW; c.height = pxH;
+      const ctx = c.getContext('2d');
+      // 居中绘制 SVG（64×64 viewBox）到 (pxW, pxH) canvas
+      ctx.drawImage(img, 0, 0, pxW, pxH);
+      const dataUrl = c.toDataURL('image/png');
+      const finalImg = new Image();
+      await new Promise((res, rej) => { finalImg.onload = res; finalImg.onerror = rej; finalImg.src = dataUrl; });
+      typeImages[type] = { image: finalImg, pxW, pxH };
+    } catch (e) {
+      console.warn('icon load failed:', type, e.message);
+    }
+  });
+  await Promise.all(tasks);
+  iconsReady = true;
+}
+
+function getIcon(type) {
+  return typeImages[type] || typeImages['其他'] || null;
+}
+
+// ============== 同坐标不同台区设备的着色图标 ==============
+// 多个台区的设备（杆塔/墙支架接入点等）可能落在完全相同的坐标上，
+// 叠在一起看不出有几种。Python 端（pole_colors.py）检测出这种冲突簇，
+// 给簇内各台区分配不同颜色（同一台区全局同色），并把颜色随设备数据推过来
+// （字段 d.color）。这里按颜色 + 类型现场生成一份着色图标（PNG dataURL），
+// 按 (type, color) 缓存复用。
+const _poleVariantCache = new Map();   // "type|colorHex" → {image, pxW, pxH}
+
+// 各类型在 SVG 里的主体圆心与半径（viewBox 64×64）
+const _TYPE_GEOM = {
+  '杆塔':            { cx: 32, cy: 32, r: 26, stroke: '#424242', lw: 3 },
+  '接入点（墙支架）': { cx: 32, cy: 32, r: 22, stroke: '#B71C1C', lw: 3 },
+  '柱上变（变压器）': { cx: 32, cy: 32, r: 20, stroke: '#7B241C', lw: 3 },
+  '计量箱':          { cx: 32, cy: 32, r: 26, stroke: '#0D47A1', lw: 3 },
+};
+
+async function buildPoleVariant(type, colorHex) {
+  const key = type + '|' + String(colorHex || '').toUpperCase();
+  if (_poleVariantCache.has(key)) return _poleVariantCache.get(key);
+
+  const sz = REAL_SIZE_M[type] || { w: 0.4, h: 0.4 };
+  const pxW = Math.max(16, Math.round(64 * sz.w / Math.max(sz.w, sz.h)));
+  const pxH = Math.max(16, Math.round(64 * sz.h / Math.max(sz.w, sz.h)));
+  const c = document.createElement('canvas');
+  c.width = pxW; c.height = pxH;
+  const ctx = c.getContext('2d');
+
+  // 底图：默认图标
+  const base = typeImages[type];
+  if (base && base.image) {
+    ctx.drawImage(base.image, 0, 0, pxW, pxH);
+  }
+
+  // 叠一层目标色（保留原深色边框压在颜色上）
+  const geom = _TYPE_GEOM[type] || { cx: 32, cy: 32, r: 24, stroke: '#424242', lw: 3 };
+  const sx = pxW / 64, sy = pxH / 64;
+  const r = geom.r * Math.min(sx, sy);
+  const cx = geom.cx * sx, cy = geom.cy * sy;
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = String(colorHex || '').toUpperCase();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = geom.stroke;
+  ctx.lineWidth = Math.max(1, geom.lw * Math.min(sx, sy));
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const dataUrl = c.toDataURL('image/png');
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = dataUrl; });
+  const variant = { image: img, pxW, pxH };
+  _poleVariantCache.set(key, variant);
+  return variant;
+}
+
+// 同坐标不同台区着色（前端自算版）—— APK 端无 Python 端配色时用。
+// 桌面端 Python（pole_colors.py）已算好 color 直接推过来，此函数跳过已有 color。
+// 算法：按 (lon,lat) 6位小数聚簇 → 簇内含 ≥2 个台区时，各台区全局分色
+//（同台区在所有簇里同色），写入 d.color（#RRGGBB）。
+function __pcAssignConflictColors(list) {
+  if (!Array.isArray(list) || !list.length) return;
+  const cluster = {};
+  for (const d of list) {
+    const key = Math.round((d.lon || 0) * 1e6) + '|' + Math.round((d.lat || 0) * 1e6);
+    (cluster[key] = cluster[key] || []).push(d);
+  }
+  // 全局台区配色表
+  const conflictLines = [];
+  const seen = new Set();
+  for (const devs of Object.values(cluster)) {
+    const lines = new Set();
+    for (const d of devs) if (d.line) lines.add(d.line);
+    if (lines.size >= 2) {
+      for (const ln of lines) if (!seen.has(ln)) { seen.add(ln); conflictLines.push(ln); }
+    }
+  }
+  if (!conflictLines.length) return;
+  const n = conflictLines.length;
+  const lineColor = {};
+  const hueStart = 0;
+  for (let i = 0; i < n; i++) {
+    const hue = (hueStart + 360.0 * i / n) % 360;
+    lineColor[conflictLines[i]] = _hueToHex(hue, 78, 42);
+  }
+  for (const devs of Object.values(cluster)) {
+    const lines = new Set();
+    for (const d of devs) if (d.line) lines.add(d.line);
+    if (lines.size < 2) continue;   // 非冲突簇，不染色
+    for (const d of devs) {
+      if (d.color) continue;         // Python 端已配色的保留
+      const c = lineColor[d.line];
+      if (c) d.color = c;
+    }
+  }
+}
+// HSL → #RRGGBB（仅用于上面，纯前端，无外部依赖）
+function _hueToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const c = l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+    return Math.round(255 * c).toString(16).padStart(2, '0');
+  };
+  return ('#' + f(0) + f(8) + f(4)).toUpperCase();
+}
+
+async function ensureIconsLoaded() {
+  if (!iconsReady) await buildIcons();
+}
+
+// 旧接口（保留兼容）：返回 type → 跳过 atlas
+function atlasRect(type) {
+  return null;
+}
+
+// ============== 设备数据管理 ==============
+let deviceEntities = [];
+let deviceData = [];      // [{id, lon, lat, name, line, type, props}]
+let deviceDataIds = new Set();  // 已推设备 id 索引（O(1) 查重）
+let deviceById = {};        // id → device record（连线 + 动态尺寸共用）
+let currentTypeFilter = null;
+let labelVisible = true; // 默认显示名称（用户 2026-09-26 明确要求）
+
+const TYPE_ICON_KEY = {
+  '柱上变（变压器）': 'transformer.svg',
+  '接入点（墙支架）': 'access_point.svg',
+  '杆塔': 'pole.svg',
+  '计量箱': 'meter_box.svg',
+  '其他': 'other.svg',
+};
+
+// 真实物理尺寸（米）— 俯视平面图投影尺寸（不是物理高度）
+// 杆塔: 直径40cm（俯视=圆 0.4×0.4）；接入点/支架: 40cm正方形；计量箱: 20cm×40cm；变压器: 1.2m×1.2m
+// 注意：REAL_SIZE_M 已在第323行定义，此处不重复定义
+
+// ============ 真实比例渲染（按地图比例尺动态缩放） ============
+// 原理：屏幕中心地面点相对相机的斜距 D（slant range）时，
+//   每像素米数 = 2 * D * tan(vFov/2) / 屏幕高（与 Cesium 内部 SSE 公式一致：
+//   m = tan(fovy/2)*D，整屏高 = 2*tan(fovy/2)*D，除以 clientHeight 像素）。
+// 设备图标像素宽高 = 真实米数 / 每像素米数，随缩放自然变化（近大远小）。
+// 22k 实体：moveEnd 立即刷新 + postRender 200ms 节流兜底，性能可接受。
+//
+// ⚠ 关键（用户 2026-09-27 "图标显示特别大" 反馈）：
+//   必须用"相机 → 屏幕中心地面点"的斜距 D，而不能用正下方椭球高度 H。
+//   3D 倾斜视角下斜距 D > 高度 H，用 H 会低估每像素米数 → 图标系统性偏大。
+// 解析斜距：相机位置 P（ECEF）→ 沿相机方向 d 到地心球面（R≈6371000）的距离。
+// 比 camera.pickEllipsoid 更可靠（不依赖地球瓦片已渲染 / swiftshader 下 pick 偶发失败）。
+// 3D 倾斜视角下斜距 D > 正下高度 H；用 H 会低估每像素米数 → 图标系统性偏大。
+function _slantRange() {
+  const cam = viewer.scene.camera;
+  const P = cam.position;        // ECEF Cartesian3
+  const d = cam.direction;      // ECEF 单位向量（屏幕中心方向）
+  const R = 6371000;
+  const dotPD = Cesium.Cartesian3.dot(P, d);
+  const Pmag2 = Cesium.Cartesian3.magnitudeSquared(P);
+  const disc = dotPD * dotPD - Pmag2 + R * R;
+  if (!(disc > 0)) return cam.positionCartographic.height || 5000;   // 不相交（指向太空）
+  // 射线 P + t*d 与球 |x|=R 交点距离。P 在球外，d 大致指向球心 → dotPD < 0。
+  // 一元二次 a·t² + b·t + c = 0 (a=1, b=2·dotPD, c=Pmag2-R²)，
+  // 较小正根 = -(dotPD) - sqrt(disc)
+  const t = -dotPD - Math.sqrt(disc);
+  if (!(t > 0)) return cam.positionCartographic.height || 5000;
+  return t;
+}
+
+const MIN_ICON_PX = 2;   // 最小可见像素（远到子像素时保留可点击性）
+function computeMetersPerPixel() {
+  const scene = viewer.scene;
+  const camera = scene.camera;
+  const canvas = scene.canvas;
+  const screenH = (canvas && canvas.clientHeight) || 700;
+  const frustum = camera.frustum;
+  // 垂直视场角：Cesium 1.131 的 PerspectiveFrustum 暴露 fovy（懒计算）；
+  // fallback 从水平 fov + 宽高比换算
+  const vFov = (frustum.fovy !== undefined && frustum.fovy > 0)
+    ? frustum.fovy
+    : ((frustum.aspectRatio && frustum.aspectRatio > 1)
+      ? 2 * Math.atan(Math.tan((frustum.fov || Math.PI / 3) / 2) / frustum.aspectRatio)
+      : (frustum.fov || Math.PI / 3));
+  // 斜距 D（解析法，比 pickEllipsoid 可靠）
+  const D = _slantRange();
+  // 每像素米数（与 Cesium 内部 SSE 公式一致：整屏高 = 2*tan(fovy/2)*D，除以 clientHeight）
+  return 2 * D * Math.tan(vFov / 2) / screenH;  // m/CSS-px
+}
+
+// 按当前相机斜距计算每类设备的真实像素宽高（下限 MIN_ICON_PX，保证可见/可点）
+// 0.4m 杆塔：斜距 1km 时 ≈ 0.24px → 2px；斜距 100m 时 ≈ 2.4px → 2-3px
+// 图标随缩放自然变化：近大远小，远距离收敛到 MIN_ICON_PX 点
+function computeTypePixelSizes() {
+  const mpp = computeMetersPerPixel();
+  const sizes = {};
+  for (const type in REAL_SIZE_M) {
+    const sz = REAL_SIZE_M[type];
+    const aspect = sz.w / sz.h;
+    let h = Math.max(MIN_ICON_PX, Math.round(sz.h / mpp));
+    let w = Math.max(MIN_ICON_PX, Math.round(sz.w / mpp));
+    // 修比例：宽/高 ≈ aspect（防止单方向 round 后比例失调）
+    if (w / h < aspect * 0.7) w = Math.max(MIN_ICON_PX, Math.round(h * aspect));
+    if (w / h > aspect * 1.4) h = Math.max(MIN_ICON_PX, Math.round(w / aspect));
+    sizes[type] = { w, h };
+  }
+  return sizes;
+}
+
+function refreshIconSizes() {
+  const sizes = computeTypePixelSizes();
+  const mpp = computeMetersPerPixel();
+  // 按类型批量赋值（5 种类型 × 2 属性 = 10 次写入，而非 22k × 2 = 44k 次）
+  // 由于所有同类型设备大小相同，可按类型一次循环完成
+  // 但每个 entity 的 billboard width/height 是独立 Property，只能逐个赋
+  // 优化：按 type 聚合 deviceEntities（5 个类型），每帧只写 22k/批
+  const buckets = { '柱上变（变压器）': [], '接入点（墙支架）': [], '杆塔': [], '计量箱': [], '其他': [] };
+  for (const ent of deviceEntities) {
+    const idKey = String(ent.id).replace(/^dev_/, '');
+    const d = deviceById[idKey];
+    if (!d) continue;
+    (buckets[d.type] || buckets['其他']).push(ent);
+  }
+  for (const type in buckets) {
+    const s = sizes[type] || { w: MIN_ICON_PX, h: MIN_ICON_PX };
+    const arr = buckets[type];
+    for (let i = 0; i < arr.length; i++) {
+      arr[i].billboard.width = s.w;
+      arr[i].billboard.height = s.h;
+    }
+  }
+  // 每 5 秒诊断一次：斜距 D / mpp / 各类型真实像素尺寸
+  const now = Date.now();
+  if (now - _lastIconLog > 5000) {
+    _lastIconLog = now;
+    const D = _slantRange();
+    console.log('ICONSCALE D=', Math.round(D||0), 'H=', Math.round(viewer.scene.camera.positionCartographic.height||0),
+      'mpp=', mpp.toFixed(4), 'minPx=', MIN_ICON_PX, 'px=', JSON.stringify(sizes));
+  }
+  viewer.scene.requestRender();
+}
+
+// 相机平移/缩放时自动刷新图标真实尺寸
+// moveEnd 立即刷；postRender 仅在斜距变化 >5% 时刷（避免每帧 22k 次写入导致卡顿）
+let _lastIconSizeCheck = 0;
+let _lastIconSizeD = -1;
+let _lastIconLog = 0;
+
+// 经纬度（world ECEF）→ 屏幕像素（手算透视投影，Cesium 1.131 Scene 无 project API）
+function _worldToScreenManual(cart, camera, W, H) {
+  // 优先走 Cesium 官方投影（若存在）
+  if (camera && typeof camera.project === 'function') {
+    const p = camera.project(cart, new Cesium.Cartesian2());
+    if (p && isFinite(p.x) && isFinite(p.y)) return { x: p.x, y: p.y };
+  }
+  // fallback：手算透视投影
+  if (!camera) return null;
+  const camInv = Cesium.Matrix4.inverse(camera.transform, new Cesium.Matrix4());
+  const e = Cesium.Matrix4.multiplyByPoint(camInv, cart, new Cesium.Cartesian3());
+  if (e.z > 0) return null;   // 点在相机后方
+  const zEye = -e.z;
+  if (zEye < 0.01) return null;
+  const f = camera.frustum;
+  let x, y;
+  if (f instanceof Cesium.PerspectiveFrustum) {
+    const t = Math.tan(f.fov / 2);
+    x = (e.x * t / zEye) * H;
+    y = (-e.y * t / zEye) * H;
+  } else if (f instanceof Cesium.OrthographicFrustum) {
+    x = (e.x / f.horizontalExtent) * H;
+    y = (-e.y / f.horizontalExtent) * H;
+  } else {
+    return null;
+  }
+  return { x: x + W / 2, y: y + H / 2 };
+}
+
+// === IP 定位 + 罗盘 + 路线规划（用户 2026-09-28） ===
+// window.PC_LOCATION 由 Python 端（或 PWA 浏览器直接 fetch api.ip.sb）注入：
+//   {lon, lat, ip, city} 或 null（探测失败）
+let _ipLocationEntity = null;       // Cesium entity（蓝色 GPS 大头针）
+let _routeLineEntity = null;        // Cesium polyline（IP → 设备 的导航线）
+function _ipLocationToLonLat() {
+  if (window.PC_LOCATION && window.PC_LOCATION.lon != null) {
+    return window.PC_LOCATION;
+  }
+  return null;
+}
+
+async function _fetchIPLocationFrontend() {
+  if (window.PC_LOCATION && window.PC_LOCATION.lon != null) {
+    return window.PC_LOCATION;
+  }
+  try {
+    const r = await fetch('https://ipwho.is/', { method: 'GET' });
+    if (r.ok) {
+      const j = await r.json();
+      if (j.longitude != null && j.latitude != null) {
+        const loc = { lon: +j.longitude, lat: +j.latitude, ip: j.ip || '', city: j.city || '' };
+        window.PC_LOCATION = loc;
+        return loc;
+      }
+    }
+  } catch (e) { console.warn('frontend IP locate failed:', e); }
+  return null;
+}
+
+function _flyToIPLocation() {
+  _fetchIPLocationFrontend().then((loc) => {
+    if (!loc) {
+      alert('IP 定位失败：请检查网络（需访问 ipwho.is）');
+      return;
+    }
+    console.log('[IP] located:', loc);
+    _dropIPMarker(loc);
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(loc.lon, loc.lat, 15000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+      duration: 1.5,
+    });
+    const nearest = _findNearestDevice(loc.lon, loc.lat, 5000);
+    if (nearest) {
+      _drawRouteTo(nearest);
+      console.log(`[IP] nearest device: ${nearest.name} (id=${nearest.id}), distance=${nearest.dist.toFixed(0)}m`);
+    } else {
+      _clearRoute();
+      console.log('[IP] no device within 5km of IP location');
+    }
+    _setCompassInfo(`IP: ${loc.city || loc.ip || (loc.lon.toFixed(2)+','+loc.lat.toFixed(2))}`);
+  });
+}
+
+function _dropIPMarker(loc) {
+  if (_ipLocationEntity) {
+    try { viewer.entities.remove(_ipLocationEntity); } catch (e) {}
+  }
+  _ipLocationEntity = viewer.entities.add({
+    name: 'IP 定位位置',
+    position: Cesium.Cartesian3.fromDegrees(loc.lon, loc.lat, 0),
+    point: {
+      pixelSize: 16,
+      color: Cesium.Color.fromCssColorString('#2F9BFF'),
+      outlineColor: Cesium.Color.WHITE,
+      outlineWidth: 3,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: `📍 IP 定位\n${loc.city || loc.ip || ''}`,
+      font: '13px Microsoft YaHei',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.fromCssColorString('#2F9BFF'),
+      outlineWidth: 2,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      pixelOffset: new Cesium.Cartesian2(0, -18),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+}
+
+function _findNearestDevice(lon, lat, maxM) {
+  let best = null, bestD = maxM;
+  for (const d of (window.deviceData || [])) {
+    if (!d.lon || !d.lat) continue;
+    const dlon = (lon - d.lon) * 111320 * Math.cos((lat + d.lat) / 2 * Math.PI / 180);
+    const dlat = (lat - d.lat) * 110574;
+    const dist = Math.sqrt(dlon * dlon + dlat * dlat);
+    if (dist < bestD) { bestD = dist; best = d; }
+  }
+  return best ? Object.assign({}, best, { dist: bestD }) : null;
+}
+
+function _drawRouteTo(target) {
+  const loc = window.PC_LOCATION;
+  if (!loc) return;
+  if (_routeLineEntity) {
+    try { viewer.entities.remove(_routeLineEntity); } catch (e) {}
+  }
+  _routeLineEntity = viewer.entities.add({
+    name: 'IP → 设备导航',
+    polyline: {
+      positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+        loc.lon, loc.lat, 0,
+        target.lon, target.lat, 0,
+      ]),
+      width: 4,
+      material: new Cesium.PolylineDashMaterialProperty({
+        color: Cesium.Color.fromCssColorString('#f1c40f'),
+        dashLength: 18,
+      }),
+      clampToGround: true,
+      arcType: Cesium.ArcType.GEODESIC,
+    },
+  });
+}
+
+function _clearRoute() {
+  if (_routeLineEntity) {
+    try { viewer.entities.remove(_routeLineEntity); } catch (e) {}
+    _routeLineEntity = null;
+  }
+}
+
+// 罗盘 HUD：每秒同步一次（节流），跟随相机 heading
+let _compassLast = 0;
+function _tickCompass() {
+  const now = performance.now();
+  if (now - _compassLast < 50) return;   // ~20fps
+  _compassLast = now;
+  const ring = document.getElementById('compass-ring');
+  if (!ring) return;
+  const headingRad = viewer.camera.heading;
+  const headingDeg = -Cesium.Math.toDegrees(headingRad);
+  ring.setAttribute('transform', `rotate(${headingDeg})`);
+  const ipArrow = document.getElementById('compass-ip-arrow');
+  if (ipArrow) {
+    const loc = window.PC_LOCATION;
+    if (loc && viewer.camera.positionCartographic) {
+      const camLon = Cesium.Math.toDegrees(viewer.camera.positionCartographic.longitude);
+      const camLat = Cesium.Math.toDegrees(viewer.camera.positionCartographic.latitude);
+      const dlon = (loc.lon - camLon) * Math.PI / 180;
+      const dlat = (loc.lat - camLat) * Math.PI / 180;
+      const y = Math.sin(dlon) * Math.cos(loc.lat * Math.PI / 180);
+      const x = Math.cos(camLat * Math.PI / 180) * Math.sin(loc.lat * Math.PI / 180)
+               - Math.sin(camLat * Math.PI / 180) * Math.cos(loc.lat * Math.PI / 180) * Math.cos(dlon);
+      const bearing = Math.atan2(y, x);
+      const bearingDeg = Cesium.Math.toDegrees(bearing);
+      const arrowDeg = bearingDeg - headingDeg;
+      ipArrow.setAttribute('transform', `rotate(${arrowDeg})`);
+    } else {
+      ipArrow.setAttribute('transform', 'rotate(0)');
+    }
+  }
+}
+
+function _setCompassInfo(text) {
+  const el = document.getElementById('compass-info');
+  if (el) el.textContent = text || '—';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('btn-ip-locate');
+  if (btn) btn.addEventListener('click', _flyToIPLocation);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'i' || e.key === 'I') {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+    _flyToIPLocation();
+  }
+});
+
+// 变压器脉冲点动画（1.2s 周期，纯 HUD canvas 绘制，不走 WebGL 管线；25fps 节流）
+let _txPulseLast = 0;
+function _tickTxPulse() {
+  const now = performance.now();
+  if (now - _txPulseLast < 40) return;   // ~25fps
+  _txPulseLast = now;
+  const cv = document.getElementById('tx-pulse-canvas');
+  if (!cv || !_txRings.length) return;
+  const map = document.getElementById('cesiumContainer');
+  const W = map.clientWidth, H = map.clientHeight;
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+  // viewer 是顶层 const，_tickTxPulse 在同一 scope 可直接引用
+  if (!viewer.scene) return;
+  const scene = viewer.scene;
+  const k = 0.5 - 0.5 * Math.cos((now % 1200) / 1200 * Math.PI * 2);   // 0→1→0
+  for (const r of _txRings) {
+    const dev = deviceById[r.id];
+    if (!dev) continue;
+    // 经纬度 → 屏幕像素（Cesium 1.131 的 Scene 无 project/cartesianToPixel，手算透视投影）
+    const cart = Cesium.Cartesian3.fromDegrees(dev.lon, dev.lat, 0);
+    const p = _worldToScreenManual(cart, viewer.scene.camera, W, H);
+    if (!p || p.x < -40 || p.y < -40 || p.x > W + 40 || p.y > H + 40) continue;
+    // 脉冲圆环：半径随 k 呼吸（12→28px），金色
+    const rad = 12 + k * 16;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,214,10,' + (0.45 + 0.55 * k).toFixed(2) + ')';
+    ctx.lineWidth = 2 + k * 2;
+    ctx.stroke();
+    // 中心点
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4 + k * 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#FFD60A';
+    ctx.fill();
+  }
+}
+
+// ============== 高亮连线宽度（真实 4cm 直径，随相机缩放动态变化）==============
+// 用户 2026-09-28：杆塔↔杆塔（红）与 杆塔↔接入点（蓝）两种高亮线
+// 线宽 = 0.04m / mpp，带 1px 下限与 24px 上限（近到贴脸时不让线吞掉设备）
+const HILITE_LINE_DIA_M = 0.04;
+const HILITE_MIN_PX = 1, HILITE_MAX_PX = 24;
+function computeHiliteLineWidthPx() {
+  const mpp = computeMetersPerPixel();
+  return Math.min(HILITE_MAX_PX, Math.max(HILITE_MIN_PX, Math.round(HILITE_LINE_DIA_M / mpp)));
+}
+// 高亮线实体分桶（renderLinks 时填充）：批量写宽度，避免逐条循环
+let _hiliteLinkBuckets = { red: [], blue: [] };
+let _lastHiliteW = 0;
+function refreshLinkWidths() {
+  const w = computeHiliteLineWidthPx();
+  if (w === _lastHiliteW) return;
+  _lastHiliteW = w;
+  for (const ent of _hiliteLinkBuckets.red)  ent.polyline.width = w;
+  for (const ent of _hiliteLinkBuckets.blue) ent.polyline.width = w;
+  viewer.scene.requestRender();
+}
+function _currentSlantRange() {
+  return _slantRange();
+}
+viewer.scene.camera.moveEnd.addEventListener(function() {
+  _lastIconSizeD = _currentSlantRange();
+  refreshIconSizes();
+  refreshLinkWidths();
+});
+viewer.scene.postRender.addEventListener(function() {
+  _tickTxPulse();
+  _tickCompass();
+  const now = Date.now();
+  // 提高节流间隔到 300ms，且斜距变化 >3% 才刷新（22k 写入很重）
+  if (now - _lastIconSizeCheck < 300) return;
+  const D = _currentSlantRange();
+  if (Math.abs(D - _lastIconSizeD) < _lastIconSizeD * 0.03 && Math.abs(D - _lastIconSizeD) < 50) return;
+  _lastIconSizeCheck = now;
+  _lastIconSizeD = D;
+  refreshIconSizes();
+  refreshLinkWidths();
+});
+
+// 周期诊断（8 秒 1 次，仅在有实体时）：斜距 D / mpp / 各类型真实像素尺寸
+setInterval(function() {
+  if (!deviceEntities.length) return;
+  const mpp = computeMetersPerPixel();
+  const D = _currentSlantRange();
+  const H = viewer.scene.camera.positionCartographic.height;
+  console.log('ICONSCALE D=', Math.round(D||0), 'H=', Math.round(H||0),
+    'mpp=', mpp.toFixed(4), 'minPx=', MIN_ICON_PX,
+    'px=', JSON.stringify(computeTypePixelSizes()));
+}, 8000);
+
+// 诊断：当前地图比例尺下每类设备真实像素尺寸（Python 端可轮询 / 手动 console 看）
+window.PowerAPI = window.PowerAPI || {};
+window.PowerAPI.getIconScaleDebug = function() {
+  const mpp = computeMetersPerPixel();
+  const D = _currentSlantRange();
+  const H = viewer.scene.camera.positionCartographic.height;
+  const frustum = viewer.scene.camera.frustum;
+  const out = { D_m: Math.round(D||0), H_m: Math.round(H||0), mpp_m_per_px: +mpp.toFixed(4),
+                minPx: MIN_ICON_PX,
+                vFov_deg: +((frustum.fovy != null ? frustum.fovy : frustum.fov) * 180 / Math.PI).toFixed(2),
+                sizes: computeTypePixelSizes(), n_entities: deviceEntities.length };
+  if (Date.now() - _lastIconLog > 3000) {
+    _lastIconLog = Date.now();
+    console.log('ICONSCALE', JSON.stringify(out));
+  }
+  return out;
+};
+// 诊断：高亮连线当前宽度（4cm 真实直径 → 像素）
+// PySide6 runJavaScript 回调拿不到返回值 → 走 console.log 由 LoggingPage 捕获
+window.getLinkWidthDebug = function() {
+  const w = computeHiliteLineWidthPx();
+  const red = _hiliteLinkBuckets.red, blue = _hiliteLinkBuckets.blue;
+  const info = `[LINKWIDTH] target_px=${w} (4cm) min=${HILITE_MIN_PX} max=${HILITE_MAX_PX} ` +
+               `red=${red.length} blue=${blue.length} ` +
+               `red_actual=${red[0] ? red[0].polyline.width : 'n/a'} ` +
+               `blue_actual=${blue[0] ? blue[0].polyline.width : 'n/a'}`;
+  console.log(info);
+  return info;
+};
+
+function clearDevices() {
+  // 真正释放：删除整个 DataSource（连带内部全部 entity）
+  if (deviceDataSource) {
+    try { viewer.dataSources.remove(deviceDataSource, true); } catch (e) {}
+    deviceDataSource = null;
+  }
+  // 兜底：旧版本可能在 viewer.entities 里残留，逐个移除
+  for (const e of deviceEntities) {
+    try { viewer.entities.remove(e); } catch (e) {}
+  }
+  deviceEntities = [];
+  _txRings = [];   // 变压器脉冲环（clearDevices 时清空）
+  // 清空数据队列 + 已渲染标记
+  deviceData = [];
+  deviceDataIds = new Set();
+  deviceById = {};       // 同步清空 O(1) 索引
+  _lineBoundsCache = {};
+  __pendingQueue = [];
+  // 强制下一帧重绘
+  viewer.scene.requestRender();
+}
+
+// 性能优化：
+//  - 共享 atlas（image: 同一张图）+ imageSubRegion 区分类型 → Cesium 合批
+//  - 图标像素尺寸 = 真实米数 / 地面每像素米数（动态随缩放变化）
+//  - label 默认 show=true（用户 2026-09-26 要求名称叠加）
+//  - requestRenderMode 由 viewer 已开 → 不移动/不重绘
+//  - 相机 moveStart/changed 事件节流刷新图标尺寸（120ms）
+let deviceDataSource = null;
+// 变压器高亮脉冲环（用户 2026-09-28：第一眼看到变压器位置）
+// 每个台区变压器 = 1 个金色 22px 圆点 + 贴地脉冲（postRender 驱动 1.2s 周期）
+let _txRings = [];
+// 串行化渲染锁：Python 端分批推送时，多个 renderDevices 可能并发进入
+// （着色图标生成含 await → 会挂起 → 下一批进来时同一设备被 add 两次 →
+// Cesium 抛 "An entity with id ... already exists"）。
+// 用一条 Promise 链把渲染排队，保证同一时刻只有一个 renderDevices 在跑。
+let _renderChain = Promise.resolve();
+
+function renderDevices(devices) {
+  // 排队执行：本次排在上一批之后
+  const run = _renderChain.then(() => _renderDevicesImpl(devices));
+  // 无论成败都要让链继续，否则一次异常会卡死后续所有推送
+  _renderChain = run.catch(() => {});
+  return run;
+}
+
+async function _renderDevicesImpl(devices) {
+  await ensureIconsLoaded();
+  if (!deviceDataSource) {
+    clearDevices();
+    deviceDataSource = new Cesium.CustomDataSource('devices');
+    deviceDataSource.clustering.enabled = false;
+    try { viewer.dataSources.add(deviceDataSource); } catch (e) {}
+  }
+  if (Array.isArray(devices)) {
+    for (const d of devices) {
+      if (!deviceDataIds.has(d.id)) {
+        deviceDataIds.add(d.id);
+        deviceData.push(d);
+        deviceById[d.id] = d;   // O(1) 连线/尺寸共用索引
+      }
+    }
+  }
+
+  // 按当前相机高度计算每类设备真实像素宽高
+  const typeSizes = computeTypePixelSizes();
+
+  // === 先把本批需要的着色图标全部生成好（循环内不再 await）===
+  // 同坐标不同台区 → 按台区着色（颜色由 Python 端计算，全局同台区同色）
+  const _pending = [];
+  for (const d of deviceData) {
+    if (d._rendered) continue;
+    if (!d.color) continue;
+    const key = d.type + '|' + String(d.color).toUpperCase();
+    if (!_poleVariantCache.has(key)) _pending.push(d);
+  }
+  for (const d of _pending) {
+    try {
+      await buildPoleVariant(d.type, d.color);
+    } catch (e) {
+      console.warn('colored variant build failed:', d.type, d.color, e && e.message);
+    }
+  }
+
+  let ok = 0, fail = 0, firstErr = '';
+  for (const d of deviceData) {
+    if (d._rendered) continue;
+    const icon = getIcon(d.type);
+    if (!icon) continue;
+    // 双保险：add 之前先标记，避免任何路径下同一 id 被 add 两次
+    // （Cesium 对重复 id 会抛 "already exists"，导致该设备整个丢失）
+    d._rendered = true;
+    try {
+      // 取着色图标（已在上面生成好，这里只是查缓存，无异步）
+      let iconImage = icon.image;
+      if (d.color) {
+        const variant = _poleVariantCache.get(d.type + '|' + String(d.color).toUpperCase());
+        if (variant && variant.image) iconImage = variant.image;
+      }
+      // 按真实地理尺寸定基像素（MIN_ICON_PX 最小）；后续随相机缩放自动刷新
+      const s = typeSizes[d.type] || { w: MIN_ICON_PX, h: MIN_ICON_PX };
+      const baseW = s.w, baseH = s.h;
+      const entDef = {
+        id: 'dev_' + d.id,
+        name: d.name,
+        position: Cesium.Cartesian3.fromDegrees(d.lon, d.lat, 0),
+        billboard: {
+          image: iconImage,
+          width: baseW,
+          height: baseH,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          heightReference: Cesium.HeightReference.NONE,
+          // 真实比例：尺寸随相机高度动态变化（refreshIconSizes 批量刷新）
+          // 不再用 scaleByDistance（线性近似不准），改用每帧真实计算
+          // 关闭 translucencyByDistance，让图标在所有距离都清晰
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+        properties: {
+          devType: d.type,
+          line: d.line,
+          district: d.district,
+          srcFile: d.src,
+          poleColor: d.color || null,
+          deviceProps: d.props || {},
+        },
+      };
+      const isTx = d.type && d.type.includes('柱上变');
+      const ent = deviceDataSource.entities.add(entDef);
+      // === 变压器高亮（用户 2026-09-28：第一眼看到每个台区变压器位置）===
+      // 贴地金色占位圈（Cesium entity，静态）+ HUD canvas 脉冲环（动态，_tickTxPulse）
+      if (isTx) {
+        ent.ellipse = {
+          semiMajorAxis: 30,
+          semiMinorAxis: 30,
+          height: 0,
+          material: Cesium.Color.fromCssColorString('rgba(255,214,10,0.22)'),
+          outline: {
+            color: Cesium.Color.fromCssColorString('#FFD60A'),
+            width: 2,
+          },
+        };
+      }
+      // 名称标签：默认显示（用户 2026-09-27 明确要求），字号固定 11px
+      ent.label = {
+        text: (isTx ? '⚡ ' : '') + d.name,
+        font: isTx ? 'bold 14px "Microsoft YaHei", sans-serif' : '11px "Microsoft YaHei", sans-serif',
+        fillColor: isTx ? Cesium.Color.fromCssColorString('#FFD60A') : Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: isTx ? 4 : 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -baseH / 2 - (isTx ? 8 : 4)),
+        showBackground: true,
+        backgroundColor: isTx
+          ? Cesium.Color.fromCssColorString('rgba(255,59,48,0.85)')
+          : new Cesium.Color(0, 0, 0, 0.72),
+        backgroundPadding: isTx ? new Cesium.Cartesian2(6, 3) : new Cesium.Cartesian2(3, 1),
+        // 标签不随图标缩放（保持字号），远距离自动淡出（>30km 半透明）
+        translucencyByDistance: isTx
+          ? new Cesium.NearFarScalar(30000, 1.0, 200000, 0.55)   // 变压器标签保持高对比
+          : new Cesium.NearFarScalar(30000, 0.9, 80000, 0.25),
+        show: labelVisible,
+      };
+      // 变压器：加入 HUD 脉冲环列表（_tickTxPulse 每帧画在 overlay canvas 上）
+      if (isTx) {
+        _txRings.push({ id: d.id });
+      }
+      deviceEntities.push(ent);
+      d._rendered = true;
+      ok++;
+    } catch (e) {
+      fail++;
+      if (!firstErr) firstErr = `${e.message} @id=${d.id} type=${d.type}`;
+      console.error('entity add failed:', e, 'dev', d);
+      // 兜底：若因 entity id 冲突失败（理论上已被串行锁消除），
+      // 用带后缀的新 id 重建，保证设备不丢
+      const msg = (e && e.message) ? String(e.message) : '';
+      if (msg.indexOf('already exists') >= 0) {
+        try {
+          const entDef2 = Object.assign({}, entDef, { id: 'dev_' + d.id + '_r' });
+          const ent2 = deviceDataSource.entities.add(entDef2);
+          deviceEntities.push(ent2);
+          ok++;
+        } catch (e2) {
+          console.error('entity re-add failed:', e2);
+        }
+      }
+      // 诊断：展开错误对象（Cesium 抛的可能是非 Error 对象）
+      if (fail <= 3) {
+        console.debug('ENTITY_ERR_DETAIL', JSON.stringify({
+          id: d.id, type: d.type, name: d.name,
+          lon: d.lon, lat: d.lat, color: d.color || null,
+          errType: Object.prototype.toString.call(e),
+          errStr: String(e),
+          errKeys: (e && typeof e === 'object') ? Object.keys(e) : [],
+          errMsg: (e && e.message) ? String(e.message) : null,
+          errStack: (e && e.stack) ? String(e.stack).slice(0, 400) : null,
+        }));
+      }
+    }
+  }
+  // 大数据量关闭 clustering（开销 > 收益）
+  deviceDataSource.clustering.enabled = false;
+  viewer.scene.requestRender();
+  return devices.length;
+}
+
+// ============== 连线渲染（按父子类型配色，A→B→C/D 拓扑） ==============
+// 数据来源：Python 端 build_links 推 [(parent_id, child_id, level), ...]
+// 配色（用户 2026-09-28）：
+//   杆塔→杆塔   红色 #FF3B30、真实直径 4cm 高亮（随相机缩放动态变宽）
+//   杆塔→接入点 蓝色 #2F9BFF、真实直径 4cm 高亮
+//   变压器→杆塔 亮黄 #FFEB3B；接入点→计量箱 暖橙 #FF9800（固定像素宽）
+let linkDataSource = null;
+function renderLinks(links, deviceById) {
+  console.log('renderLinks: links=', links.length, 'deviceById keys=', Object.keys(deviceById).length);
+  // 优先用 Python 推过来的轻量索引；否则用 deviceData 构建
+  if (!deviceById || Object.keys(deviceById).length === 0) {
+    deviceById = window.__deviceIndex || {};
+    console.log('renderLinks: fallback to __deviceIndex keys=', Object.keys(deviceById).length);
+  }
+  if (linkDataSource) {
+    try { viewer.dataSources.remove(linkDataSource, true); } catch (e) {}
+  }
+  linkDataSource = new Cesium.CustomDataSource('links');
+  try { viewer.dataSources.add(linkDataSource); } catch (e) {}
+  // 重推连线时重置高亮桶（旧实体已随旧 datasource 销毁，桶必须清空防止残留引用）
+  _hiliteLinkBuckets = { red: [], blue: [] };
+  let n = 0;
+  let missing = 0;
+  for (const lnk of links) {
+    const [parentId, childId, level] = lnk;
+    const a = deviceById[parentId];
+    const b = deviceById[childId];
+    if (!a || !b) { missing++; continue; }
+    const pa = Cesium.Cartesian3.fromDegrees(a.lon, a.lat, 0);
+    const pb = Cesium.Cartesian3.fromDegrees(b.lon, b.lat, 0);
+    // 颜色/线宽按父子类型区分（用户 2026-09-28 规则）：
+    //   杆塔→杆塔（B→B）      红色  #FF3B30  宽 4cm 真实比例（高亮）
+    //   接入点→杆塔（C→B，父=杆塔、子=接入点）蓝色  #2F9BFF  宽 4cm 真实比例（高亮）
+    //   其余（变压器→杆塔、接入点→计量箱）保持原黄橙色
+    // 注：links 为 (parentId, childId, level)：父在前、子在后
+    let lineColor, lineWidth, hiliteBucket = null;
+    const pType = a.type || '', cType = b.type || '';
+    const isPolePole = pType === '杆塔' && cType === '杆塔';
+    const isPoleAp   = pType === '杆塔' && cType === '接入点（墙支架）';
+    if (isPolePole) {
+      lineColor = '#FF3B30';   // 红：杆塔→杆塔
+      hiliteBucket = 'red';
+    } else if (isPoleAp) {
+      lineColor = '#2F9BFF';   // 蓝：杆塔→接入点
+      hiliteBucket = 'blue';
+    } else {
+      const colorMap = { 1: '#FFEB3B', 2: '#FFC107', 3: '#FF9800' };
+      const widthMap = { 1: 8, 2: 6, 3: 4 };
+      lineColor = colorMap[level] || '#FFC107';
+    }
+    // 高亮线宽 = 4cm 真实直径（动态）；其余线保持固定像素宽
+    if (hiliteBucket) {
+      lineWidth = computeHiliteLineWidthPx();
+    } else {
+      const widthMap = { 1: 8, 2: 6, 3: 4 };
+      lineWidth = widthMap[level] || 5;
+    }
+    const entDef = {
+      id: 'link_' + parentId + '_' + childId,
+      polyline: {
+        positions: [pa, pb],
+        width: lineWidth,
+        // 用普通纯色（PolylineGlow 在某些 GPU 下渲染失败）
+        material: Cesium.Color.fromCssColorString(lineColor),
+        clampToGround: true,
+        arcType: Cesium.ArcType.GEODESIC,
+      },
+    };
+    const ent = linkDataSource.entities.add(entDef);
+    if (hiliteBucket) _hiliteLinkBuckets[hiliteBucket].push(ent);
+    n++;
+  }
+  _lastHiliteW = computeHiliteLineWidthPx();   // 同步基线，避免首帧多余刷新
+  console.log('renderLinks done: created', n, 'missing endpoints', missing,
+    'hilite red=', _hiliteLinkBuckets.red.length, 'blue=', _hiliteLinkBuckets.blue.length);
+  viewer.scene.requestRender();
+  return n;
+}
+
+function clearLinks() {
+  if (linkDataSource) {
+    try { viewer.dataSources.remove(linkDataSource, true); } catch (e) {}
+    linkDataSource = null;
+  }
+  _hiliteLinkBuckets = { red: [], blue: [] };
+  _lastHiliteW = 0;
+}
+
+// 切换 label 显隐（Python 调）
+function setLabelVisible(v) {
+  labelVisible = !!v;
+  for (const e of deviceEntities) {
+    if (e.label) e.label.show = labelVisible;
+  }
+  viewer.scene.requestRender();
+}
+
+// 按类型筛选显示（支持多选：t = null | string | Set<string> | string[]）
+function setTypeFilter(t) {
+  currentTypeFilter = t;
+  // 归一化为 Set（O(1) 查）
+  let filterSet = null;
+  if (t === null || t === undefined) {
+    filterSet = null;
+  } else if (typeof t === 'string') {
+    filterSet = new Set([t]);
+  } else if (t instanceof Set) {
+    filterSet = t.size === 0 ? null : t;
+  } else if (Array.isArray(t)) {
+    filterSet = t.length === 0 ? null : new Set(t);
+  }
+  for (const e of deviceEntities) {
+    const tp = e.properties && e.properties.devType && e.properties.devType.getValue();
+    const show = !filterSet || filterSet.has(tp);
+    e.show = show;
+  }
+  viewer.scene.requestRender();
+}
+
+// 飞行到某个经纬度
+function flyTo(lon, lat, height=2000) {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(lon, lat, height),
+    duration: 1.5,
+  });
+  viewer.scene.requestRender();
+}
+
+// 飞行到某个台区的完整覆盖范围（按台区名过滤设备包围盒）
+// 按台区名预建索引（首次 O(n)，之后 O(1) 查缓存）
+let _lineBoundsCache = {};
+function _buildLineBoundsCache() {
+  if (Object.keys(_lineBoundsCache).length > 0) return; // 已建过
+  for (const d of deviceData) {
+    const key = d.line || "";
+    if (!key) continue;
+    if (!_lineBoundsCache[key]) {
+      _lineBoundsCache[key] = { minLon: Infinity, minLat: Infinity, maxLon: -Infinity, maxLat: -Infinity, count: 0 };
+    }
+    const b = _lineBoundsCache[key];
+    if (d.lon < b.minLon) b.minLon = d.lon;
+    if (d.lat < b.minLat) b.minLat = d.lat;
+    if (d.lon > b.maxLon) b.maxLon = d.lon;
+    if (d.lat > b.maxLat) b.maxLat = d.lat;
+    b.count++;
+  }
+}
+
+function flyToLine(lineName, height) {
+  _buildLineBoundsCache();
+  const b = _lineBoundsCache[lineName];
+  if (!b || b.count === 0) return;
+  const cLon = (b.minLon + b.maxLon) / 2;
+  const cLat = (b.minLat + b.maxLat) / 2;
+  const distM = Math.sqrt(
+    ((b.maxLon - b.minLon) * 111320 * Math.cos(Math.PI / 180 * cLat)) ** 2 +
+    ((b.maxLat - b.minLat) * 110574) ** 2
+  );
+  if (height === undefined) height = Math.max(3000, Math.round(distM * 2.0));
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(cLon, cLat, height),
+    duration: 1.5,
+  });
+  viewer.scene.requestRender();
+}
+
+// 自适应到全部设备
+function fitToDevices() {
+  if (!deviceData.length) return;
+  // 直接算边界，不遍历 3013 次 min/max（O(n) 但 4 个 reduce 更快）
+  let minLon=Infinity, minLat=Infinity, maxLon=-Infinity, maxLat=-Infinity;
+  for (const d of deviceData) {
+    if (d.lon < minLon) minLon = d.lon;
+    if (d.lat < minLat) minLat = d.lat;
+    if (d.lon > maxLon) maxLon = d.lon;
+    if (d.lat > maxLat) maxLat = d.lat;
+  }
+  const rect = Cesium.Rectangle.fromDegrees(
+    minLon - 0.005, minLat - 0.005,
+    maxLon + 0.005, maxLat + 0.005);
+  viewer.camera.flyTo({ destination: rect, duration: 1.5 });
+  viewer.scene.requestRender();
+}
+
+// ============== 设备数据队列（解决 Python 推数据早于 Cesium 就绪的竞态）==============
+// Python 随时可调 window.__queueDevices(arr)；分批推送时由 renderDevices 累积合并
+//  - PowerAPI 已就绪 → 立即 loadDevices（renderDevices 内部会合并到 deviceDataSource）
+//  - 未就绪 → 存到 __pendingQueue，Cesium 就绪后自动消费
+let __pendingQueue = [];
+let __pendingLinksQueue = [];
+window.__queueDevices = function(arr) {
+  if (window.PowerAPI && deviceEntities !== undefined) {
+    PowerAPI.loadDevices(arr).then(n => {
+      document.getElementById('toolbar-count').textContent = n;
+    });
+  } else {
+    // 未就绪时累加（分批调用不会覆盖之前的数据）
+    if (Array.isArray(arr)) {
+      __pendingQueue = __pendingQueue.concat(arr);
+    }
+  }
+};
+// Python 调 window.__queueLinks(links) 推连线
+window.__queueLinks = function(links) {
+  console.log('__queueLinks called, deviceData.length=', deviceData.length, 'links=', Array.isArray(links) ? links.length : 'n/a');
+  if (window.PowerAPI && deviceEntities !== undefined && deviceData.length > 0) {
+    PowerAPI.loadLinks(links);
+  } else {
+    if (Array.isArray(links)) __pendingLinksQueue = __pendingLinksQueue.concat(links);
+  }
+};
+// Python 推一个完整的轻量设备索引（id → {lon, lat, line}）
+// 这样 renderLinks 不依赖 deviceData 完整度，连线端点 100% 命中
+window.__deviceIndex = {};   // { id: {lon, lat, line, ...} }
+window.__setDeviceIndex = function(idx) {
+  window.__deviceIndex = idx || {};
+  // 若已有暂存的连线，立即消费
+  if (__pendingLinksQueue.length && window.PowerAPI) {
+    const lq = __pendingLinksQueue;
+    __pendingLinksQueue = [];
+    PowerAPI.loadLinks(lq);
+  }
+};
+
+// ============== 暴露给 Python ==============
+// 注意：loadDevices 完成后立即调 fitAll 会空（deviceData 还在 await），
+// 因此先存 data，等 renderDevices resolve 再自动 fit。
+let lastLoadedDevices = [];
+let loadResolvers = [];
+
+window.PowerAPI = {
+  loadDevices: async (data) => {
+    const list = (typeof data === 'string') ? JSON.parse(data) : data;
+    lastLoadedDevices = list;
+    const n = await renderDevices(list);
+    // 设备加载完后，若有暂存的 links 队列，渲染它们
+    if (__pendingLinksQueue.length) {
+      const lq = __pendingLinksQueue;
+      __pendingLinksQueue = [];
+      PowerAPI.loadLinks(lq);
+    }
+    // 分批推送：每批不 fit（Python 端推完后统一调 PowerAPI.fitAll()）
+    return n;
+  },
+  // 加载连线（黄色高亮 A→B→C/D）
+  loadLinks: (links) => {
+    const list = (typeof links === 'string') ? JSON.parse(links) : links;
+    // 优先用 Python 推的轻量索引；fallback 用 deviceData
+    let deviceById = window.__deviceIndex;
+    if (!deviceById || Object.keys(deviceById).length === 0) {
+      deviceById = {};
+      for (const d of deviceData) deviceById[d.id] = d;
+    }
+    return renderLinks(list, deviceById);
+  },
+  // 清空地图上所有设备（用户取消"显示设备"时调用）
+  clearDevices: () => {
+    try {
+      clearDevices();
+      clearLinks();
+      lastLoadedDevices = [];
+      // 重置队列，防止页面 reload 后旧数据又被消费
+      window.__pendingQueue = [];
+      window.__pendingLinksQueue = [];
+      document.getElementById('toolbar-count').textContent = '0';
+    } catch (e) {
+      console.warn('clearDevices failed:', e);
+    }
+  },
+  fitAll: () => fitToDevices(),
+  setTypeFilter,
+  setLabelVisible,
+  flyTo,
+  flyToLine,
+  // 关闭弹窗
+  closeInfoBox: () => { viewer.selectedEntity = undefined; },
+  // 关闭 Cesium 默认的 ion credit
+  hideCredit: () => { viewer.cesiumWidget.creditContainer.style.display = "none"; },
+  // 时间/时区信息
+  getTimezone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+  // 调试用：看当前设备数量
+  _debug: () => ({
+    deviceData: deviceData.length,
+    deviceEntities: deviceEntities.length,
+    dataSourceEntities: deviceDataSource ? deviceDataSource.entities.values.length : 0,
+    iconsReady,
+    linkCount: linkDataSource ? linkDataSource.entities.values.length : 0,
+  }),
+};
+
+// Cesium 就绪后：消费 __queueDevices 暂存的数据
+if (__pendingQueue.length) {
+  const pd = __pendingQueue;
+  __pendingQueue = [];
+  PowerAPI.loadDevices(pd).then(n => {
+    document.getElementById('toolbar-count').textContent = n;
+  });
+}
+
+// 默认隐藏左下角 credit
+setTimeout(() => window.PowerAPI.hideCredit(), 500);
+
+// 调试用：在地图中心放一个 Cesium 内置图标（验证 billboard 渲染管线是否通畅）
+window.PowerAPI.testBillboard = function() {
+  const center = viewer.camera.positionCartographic;
+  const lon = Cesium.Math.toDegrees(center.longitude);
+  const lat = Cesium.Math.toDegrees(center.latitude);
+  // 用 Cesium 内置 pin 图标（base64 PNG）— 100% 能渲染
+  const e = viewer.entities.add({
+    name: 'TEST_BUILTIN',
+    position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+    billboard: {
+      image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVQ4y2NgGAWjYBSMglEwCkbBKBgFFAACdwABnYsLwwAAAABJRU5ErkJggg==',
+      width: 48, height: 48,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+  viewer.scene.requestRender();
+  console.log('TEST billboard added at', lon, lat);
+  return e;
+};
+// 调试用：查询前 5 个实体的 label/billboard 配置
+window.PowerAPI._inspectFirst5 = function() {
+  const out = [];
+  for (let i = 0; i < Math.min(5, deviceEntities.length); i++) {
+    const e = deviceEntities[i];
+    out.push({
+      name: e.name,
+      billboard_show: e.billboard && e.billboard.show !== false,
+      billboard_width: e.billboard && e.billboard.width ? e.billboard.width.getValue ? e.billboard.width.getValue() : e.billboard.width : null,
+      label_show: e.label && e.label.show !== false,
+      label_text: e.label ? e.label.text : null,
+    });
+  }
+  return out;
+};
+// 调试用：用一个简单红方块 PNG 测试
+window.PowerAPI.testSolidRed = function() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 64, 64);
+  const dataUrl = c.toDataURL('image/png');
+  const center = viewer.camera.positionCartographic;
+  const lon = Cesium.Math.toDegrees(center.longitude);
+  const lat = Cesium.Math.toDegrees(center.latitude);
+  const e = viewer.entities.add({
+    name: 'TEST_SOLID_RED',
+    position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+    billboard: {
+      image: dataUrl,
+      width: 64, height: 64,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+  viewer.scene.requestRender();
+  console.log('TEST solid red added at', lon, lat);
+  return e;
+};
+// 调试用：在地图中心放一个完整尺寸的 atlas 图标（不用 imageSubRegion）
+window.PowerAPI.testAtlasRaw = function() {
+  if (!atlasImage || !atlasImage.complete) {
+    console.error('atlas not ready');
+    return null;
+  }
+  const center = viewer.camera.positionCartographic;
+  const lon = Cesium.Math.toDegrees(center.longitude);
+  const lat = Cesium.Math.toDegrees(center.latitude);
+  const e = viewer.entities.add({
+    name: 'TEST_ATLAS_RAW',
+    position: Cesium.Cartesian3.fromDegrees(lon, lat, 0),
+    billboard: {
+      image: atlasImage,   // 整张 atlas（不再用 imageSubRegion）
+      width: 64, height: 64,
+      verticalOrigin: Cesium.VerticalOrigin.CENTER,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+  viewer.scene.requestRender();
+  console.log('TEST atlas-raw added at', lon, lat, 'atlas size:', atlasImage.naturalWidth, 'x', atlasImage.naturalHeight);
+  return e;
+};
+
+// 隐藏加载提示
+document.getElementById('loading').style.display = 'none';
+document.getElementById('toolbar').style.display = 'block';
+
+// 错误捕获：避免某个瓦片加载失败卡死，并尝试恢复渲染
+let _renderErrorCount = 0;
+viewer.scene.renderError.addEventListener((scene, err) => {
+  _renderErrorCount++;
+  // 完整序列化错误（Cesium 错误是 Error 对象，console.error 默认只显示 [object Object]）
+  let errDetail = 'unknown';
+  try {
+    errDetail = err && err.stack ? err.stack : (err && err.message ? err.message : JSON.stringify(err));
+  } catch (e) { errDetail = String(err); }
+  console.error('Cesium render error:', errDetail);
+  // Cesium 1.131 在软件渲染（swiftshader）下 init 失败后会停止渲染循环。
+  // 这里强制重启 + 重置 requestRenderMode；每 3 秒最多重试 1 次避免死循环。
+  try {
+    viewer.useDefaultRenderLoop = true;
+    if (typeof viewer.clock.shouldAnimate !== 'undefined') {
+      viewer.clock.shouldAnimate = false;
+    }
+    scene.requestRender();
+    scene.requestRenderMode = false;   // 关闭 requestRenderMode 强制每帧渲染（防再次卡死）
+    setTimeout(() => {
+      // 5 秒后重新打开 requestRenderMode（性能考虑）
+      try { scene.requestRenderMode = true; scene.requestRender(); } catch (e) {}
+    }, 5000);
+  } catch (e) {
+    console.error('render error recovery failed:', e);
+  }
+  // 通知 Python：把错误写到 title 让 _refresh_stats 抓到
+  document.title = `PC|renderError=${_renderErrorCount}|err=${errDetail.slice(0,200)}`;
+});
+
+// 抓未捕获的 Promise 拒绝（Cesium 1.131 异步资源加载失败经常用 reject）
+window.addEventListener('unhandledrejection', (e) => {
+  const r = e.reason;
+  let detail = 'unknown';
+  // 提取 URL：Cesium 错误对象可能带 .url / .request.url / .resource.url
+  const url = (r && (r.url || (r.request && r.request.url) || (r.resource && r.resource.url))) || '';
+  try { detail = r && r.stack ? r.stack : (r && r.message ? r.message : JSON.stringify(r)); }
+  catch (err) { detail = String(r); }
+  console.error('Uncaught promise URL=', url, ' detail=', detail);
+  document.title = 'CI|unhandledPromise|' + encodeURIComponent(url.slice(0, 100)) + '|' + encodeURIComponent(detail.slice(0, 100));
+});
+// 抓全局 JS 异常
+window.addEventListener('error', (e) => {
+  const detail = e.message || 'unknown';
+  console.error('Global error:', detail, 'at', e.filename + ':' + e.lineno);
+  document.title = 'CI|globalError=' + encodeURIComponent(detail.slice(0, 200));
+});
+
+// ============== 鼠标实时坐标（右下角 #stats 显示鼠标指针对应经纬度）==============
+(function setupMouseCoords() {
+  const coordsEl = document.getElementById('coords-info');
+  if (!coordsEl) return;
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  // MOUSE_MOVE 频率高 → 节流 50ms 一次（避免卡顿）
+  let _lastMove = 0;
+  handler.setInputAction((movement) => {
+    const now = Date.now();
+    if (now - _lastMove < 50) return;
+    _lastMove = now;
+    // pickEllipsoid：把屏幕坐标反投影到地球椭球面
+    const cartesian = viewer.camera.pickEllipsoid(movement.endPosition, viewer.scene.globe.ellipsoid);
+    if (!cartesian) {
+      coordsEl.textContent = '经纬度：-（指向地球外）';
+      return;
+    }
+    const carto = Cesium.Cartographic.fromCartesian(cartesian);
+    const lon = Cesium.Math.toDegrees(carto.longitude);
+    const lat = Cesium.Math.toDegrees(carto.latitude);
+    coordsEl.textContent = `经纬度：${lon.toFixed(6)}, ${lat.toFixed(6)}`;
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+})();
+
+// ============== 比例尺（动态显示当前 GSD，screen 左下角）==============
+// 选择 100~200 像素长的条，计算对应地面长度，更新中间标签
+(function setupScalebar() {
+  const bar = document.getElementById('scalebar-bar');
+  const mid = document.getElementById('scalebar-mid');
+  const gsdLabel = document.getElementById('scalebar-gsd');
+  if (!bar || !mid || !gsdLabel) return;
+  let lastUpdate = 0;
+  viewer.scene.postRender.addEventListener(() => {
+    const now = Date.now();
+    if (now - lastUpdate < 250) return;   // 4 fps 更新足够
+    lastUpdate = now;
+    const mpp = computeMetersPerPixel();
+    if (!isFinite(mpp) || mpp <= 0) return;
+    // 选 100~150px 的条
+    const targetPx = 110;
+    let meters = mpp * targetPx;
+    let nice = niceDistance(meters);
+    let px = Math.round(nice / mpp);
+    bar.style.width = px + 'px';
+    mid.textContent = formatLength(nice);
+    gsdLabel.textContent = mpp.toFixed(mpp < 1 ? 2 : 1) + ' m/px';
+  });
+})();
+// 选择一个"漂亮"的距离值（1, 2, 5 × 10^n）
+function niceDistance(m) {
+  if (m <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(m)));
+  const norm = m / pow;
+  let nice;
+  if (norm < 1.5) nice = 1;
+  else if (norm < 3.5) nice = 2;
+  else if (norm < 7.5) nice = 5;
+  else nice = 10;
+  return nice * pow;
+}
+function formatLength(m) {
+  if (m >= 1000) return (m / 1000).toFixed(m >= 10000 ? 0 : 1) + ' km';
+  if (m >= 1) return m.toFixed(m >= 100 ? 0 : (m >= 10 ? 1 : 2)) + ' m';
+  return (m * 100).toFixed(0) + ' cm';
+}
+
+// ============== 点击设备图标 → 弹出设备详情 ==============
+// 当前选中设备（用于快捷键 F 聚焦、H 隐藏名称等）
+let _selectedEntity = null;
+let _selectedCartesian = null;
+let _selectedMeta = null;
+
+function showDeviceDetail(ent) {
+  const detailEl = document.getElementById('devDetail');
+  const titleEl = document.getElementById('devDetail-title');
+  const bodyEl = document.getElementById('devDetail-body');
+  const actsEl = document.getElementById('devDetail-actions');
+  if (!ent || !ent.properties) { detailEl.style.display = 'none'; _selectedEntity = null; return; }
+  const props = ent.properties;
+  function gp(key) {
+    const p = props && props[key];
+    if (!p) return '-';
+    const v = p.getValue ? p.getValue(Cesium.JulianDate.now()) : p;
+    return (v === undefined || v === null) ? '-' : String(v);
+  }
+  const name = gp('name') !== '-' ? gp('name') : (ent.name || '设备');
+  const type = gp('devType');
+  const line = gp('line');
+  const district = gp('district');
+  const src = gp('srcFile');
+  const propsObj = props && props.deviceProps ? props.deviceProps.getValue(Cesium.JulianDate.now()) : null;
+
+  // 保存选中状态
+  let cartLon = null, cartLat = null;
+  if (ent.position) {
+    const c = ent.position.getValue(Cesium.JulianDate.now());
+    _selectedCartesian = c;
+    const carto = Cesium.Cartographic.fromCartesian(c);
+    cartLon = Cesium.Math.toDegrees(carto.longitude);
+    cartLat = Cesium.Math.toDegrees(carto.latitude);
+  }
+  _selectedEntity = ent;
+  _selectedMeta = { name, type, line, district, src, lon: cartLon, lat: cartLat, props: propsObj };
+
+  titleEl.textContent = name;
+  let html = '<div style="display:grid;grid-template-columns:60px 1fr;gap:2px 8px;">';
+  html += `<span style="color:#aaa;">类型</span><span>${type || '-'}</span>`;
+  html += `<span style="color:#aaa;">台区</span><span>${line || '-'}</span>`;
+  if (district) html += `<span style="color:#aaa;">镇街</span><span>${district}</span>`;
+  if (src) html += `<span style="color:#aaa;">来源</span><span style="font-size:11px;">${src}</span>`;
+  if (cartLon !== null) {
+    html += `<span style="color:#aaa;">坐标</span><span style="font-family:monospace;font-size:11px;cursor:pointer;color:#5dade2;" onclick="copyCoord('${cartLon.toFixed(6)}, ${cartLat.toFixed(6)}')" title="点击复制到剪贴板">${cartLon.toFixed(6)}, ${cartLat.toFixed(6)} 📋</span>`;
+  }
+  if (propsObj && typeof propsObj === 'object') {
+    const entries = Object.entries(propsObj);
+    if (entries.length) {
+      html += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.15);color:#888;font-size:12px;">属性：</div>`;
+      for (const [k, v] of entries) {
+        html += `<div style="display:flex;justify-content:space-between;"><span style="color:#aaa;">${k}</span><span>${v}</span></div>`;
+      }
+    }
+  }
+  html += '</div>';
+  bodyEl.innerHTML = html;
+
+  // 操作按钮（按状态显示）
+  let acts = '';
+  acts += `<button class="primary" data-act="fly">🎯 定位此设备</button>`;
+  acts += `<button data-act="copy">📋 复制坐标</button>`;
+  acts += `<button data-act="copy-kmz">🗺️ 复制 KML</button>`;
+  acts += `<button data-act="focus-area">🔍 仅显示此台区</button>`;
+  actsEl.innerHTML = acts;
+  actsEl.querySelectorAll('button').forEach(b => {
+    b.onclick = () => handleDetailAction(b.dataset.act);
+  });
+
+  detailEl.style.display = 'block';
+}
+
+function handleDetailAction(act) {
+  if (!_selectedMeta) return;
+  const m = _selectedMeta;
+  if (act === 'fly') {
+    flyToEntity(_selectedEntity);
+    pulseEntity(_selectedEntity);
+  } else if (act === 'copy') {
+    copyCoord(`${m.lon.toFixed(6)}, ${m.lat.toFixed(6)}`);
+    showDetailToast('已复制坐标');
+  } else if (act === 'copy-kmz') {
+    const kml = `<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>${escAttr(m.name)}</name><description>${escAttr(`类型=${m.type} 台区=${m.line} 镇街=${m.district}`)}</description><Point><coordinates>${m.lon},${m.lat},0</coordinates></Point></Placemark></kml>`;
+    copyCoord(kml);
+    showDetailToast('已复制 KML（可粘贴到 Google Earth）');
+  } else if (act === 'focus-area') {
+    focusOnLine(m.line);
+  }
+}
+function escAttr(s) { return String(s || '').replace(/[<>&'"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c])); }
+function showDetailToast(msg) {
+  const t = document.getElementById('devDetail-toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// 飞行到设备（俯视近距离 80m，0.8s 平滑）
+function flyToEntity(ent) {
+  if (!ent || !ent.position) return;
+  const c = ent.position.getValue(Cesium.JulianDate.now());
+  if (!c) return;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromRadians(
+      Cesium.Cartographic.fromCartesian(c).longitude,
+      Cesium.Cartographic.fromCartesian(c).latitude,
+      80
+    ),
+    orientation: {
+      heading: 0,
+      pitch: Cesium.Math.toRadians(-90),
+      roll: 0
+    },
+    duration: 0.8
+  });
+  viewer.scene.requestRender();
+}
+
+// 仅显示某台区的设备 + 连线
+let _focusedLine = null;
+function focusOnLine(lineName) {
+  if (!lineName || lineName === '-') return;
+  _focusedLine = lineName;
+  let shown = 0, hidden = 0, linksShown = 0;
+  for (const ent of deviceEntities) {
+    const ln = ent.properties?.line?.getValue(Cesium.JulianDate.now());
+    if (ln === lineName) { ent.show = true; shown++; } else { ent.show = false; hidden++; }
+  }
+  for (const link of (linkEntities || [])) {
+    const ln = link.properties?.line?.getValue(Cesium.JulianDate.now());
+    if (ln === lineName) { link.show = chk_links ? true : false; linksShown++; } else { link.show = false; }
+  }
+  viewer.scene.requestRender();
+  showDetailToast(`仅显示台区：${lineName}（设备 ${shown} / 隐藏 ${hidden}）`);
+}
+function clearLineFocus() {
+  _focusedLine = null;
+  for (const ent of deviceEntities) ent.show = true;
+  for (const link of (linkEntities || [])) link.show = chk_links ? true : false;
+  viewer.scene.requestRender();
+}
+
+(function setupClickDetail() {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  const detailEl = document.getElementById('devDetail');
+  const closeEl = document.getElementById('devDetail-close');
+
+  closeEl.addEventListener('click', () => {
+    detailEl.style.display = 'none';
+    _selectedEntity = null;
+  });
+
+  handler.setInputAction((click) => {
+    const picked = viewer.scene.pick(click.position);
+    if (Cesium.defined(picked) && picked.id && picked.id.properties) {
+      showDeviceDetail(picked.id);
+      flyToEntity(picked.id);
+      pulseEntity(picked.id);
+    } else {
+      detailEl.style.display = 'none';
+      _selectedEntity = null;
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+})();
+
+// ============== 点击坐标复制到剪贴板 ==============
+function copyCoord(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      console.log('坐标已复制:', text);
+    }).catch((e) => {
+      fallbackCopy(text);
+      console.warn('clipboard API 失败，用 fallback:', e);
+    });
+  } else {
+    fallbackCopy(text);
+  }
+}
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) { console.error('execCommand copy failed:', e); }
+  document.body.removeChild(ta);
+}
+
+// ============== 点击设备 → 地图图标闪烁高亮 1 秒 ==============
+let _pulseTimer = null;
+function pulseEntity(ent) {
+  if (!ent || !ent.billboard) return;
+  // 直接读当前数值（refreshIconSizes 把 billboard.width 设成普通数字，getValue 不存在时直接取）
+  const origW = typeof ent.billboard.width === 'number' ? ent.billboard.width
+    : (ent.billboard.width && ent.billboard.width.getValue ? ent.billboard.width.getValue(Cesium.JulianDate.now()) : ent.billboard.width);
+  const origH = typeof ent.billboard.height === 'number' ? ent.billboard.height
+    : (ent.billboard.height && ent.billboard.height.getValue ? ent.billboard.height.getValue(Cesium.JulianDate.now()) : ent.billboard.height);
+  // 脉冲基准 = 当前真实尺寸（而不是固定 40px），放大 2.5 倍高亮
+  const baseW = Math.max(origW || 1, 1);
+  const baseH = Math.max(origH || 1, 1);
+  const start = performance.now();
+  const DURATION = 1200;
+  if (_pulseTimer) cancelAnimationFrame(_pulseTimer);
+  function step(now) {
+    const t = Math.min(1, (now - start) / DURATION);
+    // 脉冲放大：1.0 → 2.5 → 1.0（sin 衰减，三次脉冲）
+    const pulse = Math.sin(t * Math.PI * 6) * Math.exp(-t * 2);
+    const scale = 1 + pulse * 1.5;
+    ent.billboard.width = baseW * scale;
+    ent.billboard.height = baseH * scale;
+    viewer.scene.requestRender();
+    if (t < 1) {
+      _pulseTimer = requestAnimationFrame(step);
+    } else {
+      // 恢复为 refreshIconSizes 计算的真实尺寸（不是 origW/origH——它们可能已被 refresh 覆盖）
+      ent.billboard.width = baseW;
+      ent.billboard.height = baseH;
+      viewer.scene.requestRender();
+    }
+  }
+  _pulseTimer = requestAnimationFrame(step);
+}
+window.PowerAPI = window.PowerAPI || {};
+window.PowerAPI.pulseEntity = pulseEntity;
+
+// ============== 图例（右上角，按类型显示设备总数）==============
+function populateLegend() {
+  const counts = { '柱上变': 0, '杆塔': 0, '接入点': 0, '计量箱': 0, '其他': 0 };
+  if (!deviceData || !deviceData.length) {
+    return false;
+  }
+  for (const d of deviceData) {
+    const t = d.type || '其他';
+    if (counts[t] !== undefined) counts[t]++;
+    else counts['其他']++;
+  }
+  // 兼容长名（柱上变（变压器））也算入柱上变
+  for (const d of deviceData) {
+    if (d.type && d.type.includes('柱上变')) counts['柱上变']++;
+    else if (d.type && d.type.includes('接入点')) counts['接入点']++;
+  }
+  // 图例已删除（用户 2026-09-28 要求）：不再写 #legend DOM
+  // 调试：每 3s 报告一下关键 HUD 元素的 computed style，确认它们真的可见
+  if (window._hudFirstShow) return true;
+  window._hudFirstShow = true;
+  setTimeout(() => {
+    for (const id of ['scalebar','hotkey-hint','devDetail','quick-search','context-menu','compass']) {
+      const el = document.getElementById(id);
+      if (!el) { console.log(`[HUD-CHECK] #${id}: NOT FOUND`); continue; }
+      const cs = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      console.log(`[HUD-CHECK] #${id}: display=${cs.display} visibility=${cs.visibility} opacity=${cs.opacity} z=${cs.zIndex} pos=${cs.position} rect=(${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.right)},${Math.round(rect.bottom)})`);
+    }
+  }, 1500);
+  return true;
+}
+// 初始尝试 + 每 800ms 轮询一次，最长 30s 兜底（解决 deviceData 异步加载时序问题）
+let _hudRetries = 0;
+function _hudPoll() {
+  if (populateLegend()) return;   // 成功就停止
+  if (++_hudRetries > 40) return;
+  setTimeout(_hudPoll, 800);
+}
+setTimeout(_hudPoll, 200);
+
+// ============== 设备名称显示开关（H 键）==============
+let _labelsVisible = true;
+function toggleLabels() {
+  _labelsVisible = !_labelsVisible;
+  for (const ent of deviceEntities) {
+    if (ent.label) ent.label.show = _labelsVisible;
+  }
+  viewer.scene.requestRender();
+  showDetailToast(_labelsVisible ? '已显示设备名称' : '已隐藏设备名称');
+}
+
+// ============== 重置视角（R 键，飞回首设备）==============
+function resetView() {
+  if (!deviceEntities.length) return;
+  // 找到第一个有 srcFile 的设备作为参考
+  const first = deviceEntities.find(e => e.properties?.srcFile) || deviceEntities[0];
+  if (!first || !first.position) return;
+  const c = first.position.getValue(Cesium.JulianDate.now());
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromRadians(
+      Cesium.Cartographic.fromCartesian(c).longitude,
+      Cesium.Cartographic.fromCartesian(c).latitude,
+      25000
+    ),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+    duration: 1.2
+  });
+  viewer.scene.requestRender();
+  showDetailToast('已重置视角');
+}
+
+// ============== 缩放 +/- 键（沿当前相机方向 0.7x / 1.4x）==============
+function zoomBy(factor) {
+  const cam = viewer.camera;
+  const dir = cam.direction;
+  const cur = Cesium.Cartesian3.magnitude(Cesium.Cartesian3.subtract(cam.position, cam.pickEllipsoid({x: viewer.canvas.clientWidth/2, y: viewer.canvas.clientHeight/2}) || cam.position, new Cesium.Cartesian3()));
+  // 简化：沿 direction 单位向量改变相机位置距离
+  const target = Cesium.Cartesian3.add(
+    cam.position,
+    Cesium.Cartesian3.multiplyByScalar(dir, factor > 1 ? -1000 : 1000, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+  // 保持高度不小于 50
+  const car = Cesium.Cartographic.fromCartesian(target);
+  if (car.height < 50) car.height = 50;
+  const dest = Cesium.Cartesian3.fromRadians(car.longitude, car.latitude, car.height);
+  cam.setView({ destination: dest });
+  viewer.scene.requestRender();
+}
+
+// ============== 全局快捷键绑定 ==============
+// 注意：input/textarea 中按键不触发全局快捷键
+(function setupHotkeys() {
+  const hint = document.getElementById('hotkey-hint');
+  let _hintFadeTimer = null;
+  function fadeHint() {
+    if (!hint) return;
+    hint.classList.add('faded');
+    clearTimeout(_hintFadeTimer);
+    _hintFadeTimer = setTimeout(() => hint.classList.remove('faded'), 4000);
+  }
+  // 5 秒后自动淡出
+  setTimeout(fadeHint, 5000);
+  document.addEventListener('mousemove', fadeHint);
+
+  document.addEventListener('keydown', (e) => {
+    const ae = document.activeElement;
+    const inInput = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+    if (inInput) {
+      // Esc 在 input 中：关闭搜索
+      if (e.key === 'Escape') {
+        ae.blur();
+        hideQuickSearch();
+      }
+      return;
+    }
+    const k = e.key;
+    if (k === '/' || (e.keyCode === 191)) {
+      e.preventDefault();
+      showQuickSearch();
+    } else if (k === 'r' || k === 'R') {
+      resetView();
+    } else if (k === 'f' || k === 'F') {
+      if (_selectedEntity) { flyToEntity(_selectedEntity); pulseEntity(_selectedEntity); }
+      else showDetailToast('未选中设备（点击地图上图标或按 / 搜索）');
+    } else if (k === 'h' || k === 'H') {
+      toggleLabels();
+    } else if (k === 'l' || k === 'L') {
+      const cb = document.getElementById('chk_links');
+      if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); showDetailToast(cb.checked ? '已显示连线' : '已隐藏连线'); }
+    } else if (k === '+' || k === '=') {
+      zoomBy(1.4);
+    } else if (k === '-' || k === '_') {
+      zoomBy(0.7);
+    } else if (k === 'Escape') {
+      document.getElementById('devDetail').style.display = 'none';
+      hideQuickSearch();
+      hideContextMenu();
+      if (_focusedLine) clearLineFocus();
+      _selectedEntity = null;
+    } else if (k === 'Enter') {
+      // 如果有焦点搜索框，触发选中跳转
+      const qsInput = document.getElementById('qs-input');
+      if (qsInput && document.activeElement === qsInput) {
+        const active = document.querySelector('#qs-results .item.active');
+        if (active) active.click();
+      }
+    } else if (k === 'ArrowDown' || k === 'ArrowUp') {
+      const qsInput = document.getElementById('qs-input');
+      if (qsInput && document.activeElement === qsInput) {
+        e.preventDefault();
+        navigateQuickResults(k === 'ArrowDown' ? 1 : -1);
+      }
+    }
+  });
+})();
+
+// ============== 快捷搜索面板（/ 键触发）==============
+let _qsResults = [];
+let _qsActiveIdx = -1;
+function showQuickSearch() {
+  const panel = document.getElementById('quick-search');
+  const input = document.getElementById('qs-input');
+  panel.classList.add('show');
+  input.focus();
+  input.select();
+  _runQuickSearch('');
+}
+function hideQuickSearch() {
+  document.getElementById('quick-search').classList.remove('show');
+  document.getElementById('qs-input').value = '';
+  _qsResults = [];
+  _qsActiveIdx = -1;
+}
+function navigateQuickResults(delta) {
+  if (!_qsResults.length) return;
+  _qsActiveIdx = ((_qsActiveIdx + delta) + _qsResults.length) % _qsResults.length;
+  _renderQuickResults();
+  // 滚动到可见
+  const items = document.querySelectorAll('#qs-results .item');
+  items[_qsActiveIdx]?.scrollIntoView({ block: 'nearest' });
+}
+function _runQuickSearch(q) {
+  q = q.trim().toLowerCase();
+  _qsResults = [];
+  if (!q) {
+    _qsActiveIdx = -1;
+    _renderQuickResults();
+    return;
+  }
+  // 台区名匹配：取台区集合
+  const lines = new Set();
+  for (const d of deviceData) if (d.line) lines.add(d.line);
+  for (const ln of lines) {
+    if (ln.toLowerCase().includes(q)) _qsResults.push({ kind: 'line', line: ln, count: 0 });
+  }
+  // 设备匹配：name / type / district
+  let devCount = 0;
+  for (const d of deviceData) {
+    if (devCount >= 200) break;
+    if ((d.name && d.name.toLowerCase().includes(q)) ||
+        (d.type && d.type.toLowerCase().includes(q)) ||
+        (d.district && d.district.toLowerCase().includes(q))) {
+      _qsResults.push({ kind: 'device', device: d });
+      devCount++;
+    }
+  }
+  // 经纬度格式匹配：lon,lat
+  const m = q.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+  if (m) {
+    const lon = parseFloat(m[1]), lat = parseFloat(m[2]);
+    if (lon >= -180 && lon <= 180 && lat >= -90 && lat <= 90) {
+      _qsResults.unshift({ kind: 'coord', lon, lat });
+    }
+  }
+  _qsActiveIdx = _qsResults.length > 0 ? 0 : -1;
+  _renderQuickResults();
+}
+function _renderQuickResults() {
+  const el = document.getElementById('qs-results');
+  if (!_qsResults.length) {
+    el.innerHTML = '<div class="empty">无匹配结果</div>';
+    return;
+  }
+  let html = '';
+  _qsResults.forEach((r, i) => {
+    const active = i === _qsActiveIdx ? ' active' : '';
+    if (r.kind === 'line') {
+      html += `<div class="item${active}" data-idx="${i}"><span>📍 ${escAttr(r.line)}</span><span class="meta">台区</span></div>`;
+    } else if (r.kind === 'device') {
+      const d = r.device;
+      const badgeCls = d.type === '柱上变' ? 'tx' : d.type === '杆塔' ? 'pole' : d.type === '接入点' ? 'ap' : 'box';
+      html += `<div class="item${active}" data-idx="${i}"><span><span class="badge ${badgeCls}">${escAttr(d.type)}</span>${escAttr(d.name)}</span><span class="meta">${d.lon.toFixed(4)},${d.lat.toFixed(4)}</span></div>`;
+    } else if (r.kind === 'coord') {
+      html += `<div class="item${active}" data-idx="${i}"><span>🎯 经纬度</span><span class="meta">${r.lon.toFixed(4)}, ${r.lat.toFixed(4)}</span></div>`;
+    }
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.item').forEach((it) => {
+    it.onclick = () => {
+      const idx = parseInt(it.dataset.idx);
+      const r = _qsResults[idx];
+      if (!r) return;
+      if (r.kind === 'line') {
+        hideQuickSearch();
+        focusOnLine(r.line);
+        // 飞到台区中心（取该 line 第一台设备）
+        const firstDev = deviceData.find(d => d.line === r.line);
+        if (firstDev) {
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromRadians(firstDev.lon * Math.PI/180, firstDev.lat * Math.PI/180, 1200),
+            orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+            duration: 1.5
+          });
+        }
+      } else if (r.kind === 'device') {
+        const d = r.device;
+        const ent = (typeof __setDeviceIndex === 'function') ? null : null;  // 直接定位无需 entity
+        hideQuickSearch();
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromRadians(d.lon * Math.PI/180, d.lat * Math.PI/180, 80),
+          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
+          duration: 1.0
+        });
+        showDetailToast(`已飞行到 ${d.name}`);
+      } else if (r.kind === 'coord') {
+        hideQuickSearch();
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromRadians(r.lon * Math.PI/180, r.lat * Math.PI/180, 2000),
+          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+          duration: 1.5
+        });
+      }
+    };
+  });
+}
+document.getElementById('qs-input').addEventListener('input', (e) => {
+  _runQuickSearch(e.target.value);
+});
+// 点击面板外关闭
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('quick-search');
+  if (panel.classList.contains('show') && !panel.contains(e.target)) {
+    hideQuickSearch();
+  }
+});
+
+// ============== 右键上下文菜单 ==============
+let _ctxLat = null, _ctxLon = null;
+function showContextMenu(x, y, items) {
+  const menu = document.getElementById('context-menu');
+  let html = '';
+  items.forEach((it, i) => {
+    if (it.sep) html += '<div class="sep"></div>';
+    else html += `<div class="item${it.disabled ? ' disabled' : ''}" data-i="${i}">${it.label}${it.shortcut ? `<span class="shortcut">${it.shortcut}</span>` : ''}</div>`;
+  });
+  menu.innerHTML = html;
+  menu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
+  menu.style.top = Math.min(y, window.innerHeight - items.length * 32) + 'px';
+  menu.classList.add('show');
+  menu.querySelectorAll('.item').forEach((el) => {
+    if (el.classList.contains('disabled')) return;
+    el.onclick = () => {
+      const i = parseInt(el.dataset.i);
+      items[i].action && items[i].action();
+      hideContextMenu();
+    };
+  });
+}
+function hideContextMenu() {
+  document.getElementById('context-menu').classList.remove('show');
+}
+(function setupContextMenu() {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction((movement) => {
+    // 拾取：先看是否在设备上
+    const picked = viewer.scene.pick(movement.position);
+    const isDevice = Cesium.defined(picked) && picked.id && picked.id.properties;
+    // 把屏幕坐标 → 经纬度
+    const cart = viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid);
+    let lon = null, lat = null;
+    if (cart) {
+      const car = Cesium.Cartographic.fromCartesian(cart);
+      lon = Cesium.Math.toDegrees(car.longitude);
+      lat = Cesium.Math.toDegrees(car.latitude);
+      _ctxLat = lat; _ctxLon = lon;
+    }
+    const items = [];
+    if (isDevice) {
+      const ent = picked.id;
+      items.push({ label: '🎯 定位此设备', action: () => { showDeviceDetail(ent); flyToEntity(ent); pulseEntity(ent); } });
+      items.push({ label: '📋 复制坐标', action: () => {
+        if (ent.position) {
+          const c = ent.position.getValue(Cesium.JulianDate.now());
+          const car = Cesium.Cartographic.fromCartesian(c);
+          const lo = Cesium.Math.toDegrees(car.longitude).toFixed(6);
+          const la = Cesium.Math.toDegrees(car.latitude).toFixed(6);
+          copyCoord(`${lo}, ${la}`);
+          showDetailToast('已复制坐标');
+        }
+      }});
+      items.push({ label: '🗺️ 复制 KML', action: () => {
+        if (ent.position) {
+          const c = ent.position.getValue(Cesium.JulianDate.now());
+          const car = Cesium.Cartographic.fromCartesian(c);
+          const lo = Cesium.Math.toDegrees(car.longitude).toFixed(6);
+          const la = Cesium.Math.toDegrees(car.latitude).toFixed(6);
+          const nm = ent.properties?.name?.getValue(Cesium.JulianDate.now()) || '设备';
+          const tp = ent.properties?.devType?.getValue(Cesium.JulianDate.now()) || '';
+          const kml = `<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark><name>${escAttr(nm)}</name><description>类型=${escAttr(tp)}</description><Point><coordinates>${lo},${la},0</coordinates></Point></Placemark></kml>`;
+          copyCoord(kml);
+          showDetailToast('已复制 KML');
+        }
+      }});
+      items.push({ sep: true });
+    }
+    if (lon !== null) {
+      items.push({ label: '🛰️ 飞行到此点', shortcut: 'G', action: () => {
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromRadians(lon * Math.PI/180, lat * Math.PI/180, 800),
+          orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+          duration: 1.0
+        });
+      }});
+      items.push({ label: '📋 复制此点坐标', action: () => {
+        copyCoord(`${lon.toFixed(6)}, ${lat.toFixed(6)}`);
+        showDetailToast('已复制坐标');
+      }});
+    }
+    items.push({ sep: true });
+    items.push({ label: '↺ 重置视角', shortcut: 'R', action: resetView });
+    if (_focusedLine) items.push({ label: '🗺️ 清除台区筛选', action: clearLineFocus });
+    if (items.length) showContextMenu(movement.position.x, movement.position.y, items);
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+  // 点击右键菜单外关闭
+  document.addEventListener('click', hideContextMenu);
+})();
+
+// ============== 双击台区节点 → 飞行到该台区 ==============
+(function setupDoubleClick() {
+  const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction((click) => {
+    const picked = viewer.scene.pick(click.position);
+    if (Cesium.defined(picked) && picked.id && picked.id.properties) {
+      const ent = picked.id;
+      const ln = ent.properties?.line?.getValue(Cesium.JulianDate.now());
+      if (ln && ln !== '-') {
+        // 双击：聚焦该台区
+        focusOnLine(ln);
+        const firstDev = deviceData.find(d => d.line === ln);
+        if (firstDev) {
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromRadians(firstDev.lon * Math.PI/180, firstDev.lat * Math.PI/180, 1200),
+            orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+            duration: 1.2
+          });
+        }
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+})();
+
+// 设备加载完成后把状态写进 document.title，供 Python 端轮询诊断
+function reportState() {
+  const db = window.PowerAPI._debug ? window.PowerAPI._debug() : {};
+  const c = document.getElementById('toolbar-count');
+  // 额外诊断：deviceData 里各 type 数量 + atlasRect 是否都命中
+  const typeCount = {};
+  let missType = 0;
+  for (const d of deviceData) {
+    typeCount[d.type] = (typeCount[d.type] || 0) + 1;
+    if (!atlasRect(d.type)) missType++;
+  }
+  const tc = Object.entries(typeCount).map(([k,v]) => `${k.slice(0,4)}:${v}`).join(',');
+  document.title = `PC|dev=${db.dataSourceEntities||db.deviceEntities||0}|icons=${db.iconsReady? 'Y':'N'}|count=${c? c.textContent:'?'}|dd=${deviceData.length}|links=${db.linkCount}|${tc}`;
+}
+window.PowerAPI._reportState = reportState;
+// 加载完成 + 每 3s 上报一次
+setTimeout(reportState, 3000);
+setInterval(reportState, 3000);
+
+// ============== 台区供电覆盖范围渲染（彩色虚线轮廓，无填充）==============
+// 每个台区用不同颜色虚线闭合线 + 台区标签，不遮挡地图
+let _coverageSource = null;
+let _coverageEntities = [];
+// 9 种颜色（全不透明，虚线用 Cesium.Color 直接指定）
+const _COV_COLORS = [
+  Cesium.Color.fromCssColorString('#3498db'),  // 蓝
+  Cesium.Color.fromCssColorString('#2ecc71'),  // 绿
+  Cesium.Color.fromCssColorString('#e74c3c'),  // 红
+  Cesium.Color.fromCssColorString('#f1c40f'),  // 黄
+  Cesium.Color.fromCssColorString('#9b59b6'),  // 紫
+  Cesium.Color.fromCssColorString('#e67e22'),  // 橙
+  Cesium.Color.fromCssColorString('#1abc9c'),  // 青
+  Cesium.Color.fromCssColorString('#34495e'),  // 深蓝灰
+  Cesium.Color.fromCssColorString('#e664b8'),  // 粉
+];
+
+window.PowerAPI.setCoverage = function (geojson) {
+  // 清除旧
+  window.PowerAPI.clearCoverage();
+  if (!geojson || !geojson.features || !geojson.features.length) return;
+
+  _coverageSource = new Cesium.CustomDataSource('coverage');
+  try { viewer.dataSources.add(_coverageSource); } catch (e) {}
+
+  geojson.features.forEach((feat, i) => {
+    const geom = feat.geometry;
+    if (!geom || geom.type !== 'Polygon' || !geom.coordinates.length) return;
+    const ring = geom.coordinates[0];
+    if (!ring || ring.length < 3) return;
+
+    const color = _COV_COLORS[i % _COV_COLORS.length];
+
+    // 闭合坐标（首尾相同）
+    const positions = ring.map(p => Cesium.Cartesian3.fromDegrees(p[0], p[1], 0));
+    positions.push(positions[0]);
+
+    // 彩色虚线闭合轮廓（无填充 → 不遮挡地图）
+    const entDef = {
+      id: 'cov_' + i + '_' + (feat.properties.line || ''),
+      polyline: {
+        positions: positions,
+        width: 3,
+        material: new Cesium.PolylineDashMaterialProperty({
+          color: color,
+          dashLength: 16,
+        }),
+        clampToGround: true,
+      },
+      properties: {
+        covLine: feat.properties.line || '',
+        covArea: feat.properties.area_km2 || 0,
+        covCount: feat.properties.device_count || 0,
+      },
+    };
+    const ent = _coverageSource.entities.add(entDef);
+    _coverageEntities.push(ent);
+  });
+
+  // 台区标签（中心位置，小字）
+  geojson.features.forEach((feat, i) => {
+    const c = feat.properties.centroid;
+    if (!c || c.length < 2) return;
+    const color = _COV_COLORS[i % _COV_COLORS.length];
+    const lineName = feat.properties.line || '';
+    const devCount = feat.properties.device_count || 0;
+    const ent = viewer.entities.add({
+      id: 'cov_label_' + i,
+      position: Cesium.Cartesian3.fromDegrees(c[0], c[1], 0),
+      label: {
+        text: lineName + ' ' + devCount + '台',
+        font: '11px "Microsoft YaHei", sans-serif',
+        fillColor: color,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -10),
+        heightReference: Cesium.HeightReference.NONE,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        show: true,
+      },
+    });
+    _coverageEntities.push(ent);
+  });
+
+  viewer.scene.requestRender();
+  console.log('[COVERAGE] rendered', geojson.features.length, 'zones (dashed outlines)');
+};
+
+window.PowerAPI.clearCoverage = function () {
+  for (const e of _coverageEntities) {
+    try {
+      if (e.id && String(e.id).startsWith('cov_label_')) {
+        viewer.entities.remove(e);
+      } else if (_coverageSource) {
+        _coverageSource.entities.remove(e);
+      }
+    } catch (e2) {}
+  }
+  _coverageEntities = [];
+  if (_coverageSource) {
+    try { viewer.dataSources.remove(_coverageSource, true); } catch (e) {}
+    _coverageSource = null;
+  }
+  viewer.scene.requestRender();
+};
+
+// ==== 全局提示条（户表批量工具等 Python→JS 调用）====
+// 放在脚本最末，确保不被前面的 window.PowerAPI = {...} 整体覆盖。
+window.PowerAPI = window.PowerAPI || {};
+window.PowerAPI.toast = function (msg) {
+  var t = document.getElementById('globalToast');
+  if (!t) { console.log('[toast]', msg); return; }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window.__globalToastTimer);
+  window.__globalToastTimer = setTimeout(function () { t.classList.remove('show'); }, 4000);
+};
+
+</script>
+<!-- MOBILE_OVERLAY -->
+
+<!-- MOBILE_DATA_LOADER -->
+<script>
+// 单机 APK：直接从内置 assets 加载设备数据（Python 端推送在 APK 里不可用）
+// 注意：用【相对路径】而非 http://127.0.0.1:port ——
+//       绝对明文地址会撞 Android 9+ 的明文流量策略（net::ERR_CLEARTEXT_NOT_PERMITTED）
+//
+// 【2026-10-30】APK 出厂不带任何台区数据：
+//   /data/devices.json 读不到 → 返回空数组 → 页面显示"暂无数据"引导用户导入。
+(function bootData() {
+  function showEmptyState() {
+    var el = document.getElementById('loading');
+    if (el) {
+      el.style.display = 'block';
+      el.style.zIndex = '900';
+      el.style.background = 'rgba(12,20,32,0.92)';
+      el.style.borderRadius = '10px';
+      el.style.padding = '18px 22px';
+      el.style.maxWidth = '78vw';
+      el.style.lineHeight = '1.9';
+      el.style.textAlign = 'center';
+      el.innerHTML =
+        '<div style="font-size:17px;color:#f1c40f;margin-bottom:8px">暂无台区数据</div>' +
+        '<div style="font-size:13px;color:#cfd8e3">请用右下角按钮导入：</div>' +
+        '<div style="font-size:13px;color:#2F9BFF;margin-top:6px">📦 导入压缩包（zip / 7z / rar 等）</div>' +
+        '<div style="font-size:13px;color:#2F9BFF">📂 打开数据目录（选文件夹）</div>' +
+        '<div style="font-size:11px;color:#7b8794;margin-top:10px">' +
+        '台区文件：文件名含「安卓」的 .xls / .xlsx</div>';
+    }
+    if (window.__pcRefreshBars) window.__pcRefreshBars();
+  }
+
+  fetch('/data/devices.json')
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(list){
+      list = Array.isArray(list) ? list : (list.devices || []);
+      if (!list.length) { showEmptyState(); return; }
+      // 同坐标不同台区着色（前端自算：APK 端无 Python，按 (lon,lat) 聚簇 + 台区分色）
+      __pcAssignConflictColors(list);
+      // 设备
+      PowerAPI.loadDevices(list).then(function(n){
+        document.getElementById('toolbar-count').textContent = n;
+        // 轻量索引
+        var idx = {};
+        for (var i=0;i<list.length;i++) idx[list[i].id] = list[i];
+        window.__setDeviceIndex(idx);
+        // 相机对准设备区域：renderDevices 内部会在数据就绪后自动 fit
+        // （这里不再重复调用 fitAll —— 早期调用会因 deviceData 未就绪而空转）
+      });
+      // 连线：devices_bundle.json 里带完整拓扑，单机版直接读
+      fetch('/data/devices_bundle.json')
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(bundle){
+          if (!bundle) return;
+          var links = bundle.links || bundle.linkData || [];
+          if (!links.length) return;
+          // bundle.links 可能是 [parentId, childId, level] 或 {p,c,l} 两种格式
+          var norm = links.map(function(L){
+            if (Array.isArray(L)) return [L[0], L[1], L[2] != null ? L[2] : 0];
+            return [L.p != null ? L.p : L.parent, L.c != null ? L.c : L.child,
+                    L.l != null ? L.l : (L.level != null ? L.level : 0)];
+          }).filter(function(L){ return L[0] != null && L[1] != null; });
+          try {
+            window.PowerAPI.loadLinks(norm);
+            console.log('[bootData] links loaded:', norm.length);
+          } catch (e) { console.warn('loadLinks failed:', e); }
+        })
+        .catch(function(e){ console.warn('bundle load failed:', e); });
+    })
+    .catch(function(e){
+      document.getElementById('loading').textContent =
+        '设备数据加载失败：' + e.message;
+      console.error('bootData failed:', e);
+    });
+})();
+</script>
+<!-- ============================================================
+     电力低压数据采集 — 移动端触屏增强（APK / 手机浏览器通用）
+     由 build_apk.py 在打包时自动注入 index.html
+     ============================================================ -->
+
+<style>
+  /* === 移动端：悬浮大按钮（触屏 44px+ 触控目标）=== */
+  @media (pointer: coarse), (max-width: 820px) {
+    #hotkey-hint { display:none !important; }         /* 键盘提示在触屏上无用 */
+    #btn-ip-locate {
+      top:auto; bottom:64px; right:10px;              /* 移到右下悬浮组上方 */
+      font-size:14px; padding:10px 16px; min-width:48px; min-height:48px;
+      display:flex; align-items:center; gap:6px;
+    }
+    #compass { bottom:64px; right:120px; width:90px; } /* 让位给悬浮按钮组 */
+    /* 放大所有可点元素触控目标 */
+    #devDetail .dev-detail-actions button { min-height:44px; font-size:13px; padding:8px 10px; }
+    #quick-search { width:min(480px, 92vw); }
+    #quick-search input { min-height:44px; font-size:15px; }
+    #quick-search .results .item { min-height:44px; font-size:14px; padding:8px 10px; }
+    #devDetail { width:min(360px, 88vw); font-size:14px; }
+    /* 比例尺缩小避免挡按钮 */
+    #scalebar { font-size:10px; bottom:10px; }
+  }
+
+  /* === 悬浮按钮组（触屏主控件）=== */
+  #fab-group {
+    position:absolute; right:10px; bottom:12px; z-index:25;
+    display:none; flex-direction:column; gap:8px;
+  }
+  #fab-group.show { display:flex; }
+  .fab {
+    width:48px; height:48px; border-radius:50%;
+    background:rgba(20,30,48,0.88); color:#fff;
+    border:1px solid rgba(241,196,15,0.45);
+    box-shadow:0 4px 14px rgba(0,0,0,0.45);
+    font-size:20px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-tap-highlight-color:rgba(241,196,15,0.4);
+    touch-action:manipulation;                 /* 触屏：直接响应，无双击缩放延迟 */
+  }
+  .fab:active { background:rgba(241,196,15,0.35); transform:scale(0.94); }
+  .fab .fab-tip {
+    position:absolute; right:56px; top:50%; transform:translateY(-50%);
+    background:rgba(20,30,48,0.92); color:#fff; font-size:12px;
+    padding:3px 8px; border-radius:4px; white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .15s;
+  }
+  .fab:hover .fab-tip { opacity:1; }
+
+  /* 搜索输入面板放大 */
+  @media (pointer: coarse) {
+    #quick-search .hint { font-size:12px; }
+    #quick-search .results { max-height:40vh; }
+  }
+
+  /* 触屏双击设备 = 聚焦台区（Cesium 默认双击缩放禁用后补充） */
+  html, body { touch-action:none; overscroll-behavior:none; }
+  #cesiumContainer canvas { touch-action:none; }
+</style>
+
+<!-- 悬浮按钮组 -->
+<div id="fab-group">
+  <button class="fab" data-fab="search" title="搜索设备 / 台区 / 经纬度">🔍<span class="fab-tip">搜索</span></button>
+  <button class="fab" data-fab="fit" title="聚焦所有设备">⊙<span class="fab-tip">全览</span></button>
+  <button class="fab" data-fab="reset" title="重置视角">↺<span class="fab-tip">重置</span></button>
+  <button class="fab" data-fab="labels" title="显示/隐藏设备名称">Aa<span class="fab-tip">名称</span></button>
+  <button class="fab" data-fab="links" title="显示/隐藏连线">∿<span class="fab-tip">连线</span></button>
+  <button class="fab" data-fab="import-dir" title="打开数据目录（选文件夹）">📂<span class="fab-tip">选目录</span></button>
+  <button class="fab" data-fab="import-file" title="导入压缩包 / Excel 文件">📦<span class="fab-tip">导入文件</span></button>
+  <button class="fab" data-fab="close" title="关闭弹窗">✕<span class="fab-tip">关闭</span></button>
+</div>
+
+<script>
+(function initMobileControls() {
+  // 仅触屏设备启用悬浮按钮组
+  var coarse = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+             || ('ontouchstart' in window);
+  if (coarse) document.getElementById('fab-group').classList.add('show');
+
+  var fab = document.getElementById('fab-group');
+  fab.addEventListener('click', function(e) {
+    var b = e.target.closest('.fab');
+    if (!b) return;
+    var act = b.dataset.fab;
+    if (act === 'search') {
+      showQuickSearch();
+    } else if (act === 'fit') {
+      PowerAPI.fitAll();
+      showDetailToast('已聚焦全部设备');
+    } else if (act === 'reset') {
+      resetView();
+    } else if (act === 'labels') {
+      toggleLabels();
+    } else if (act === 'links') {
+      // 桌面版 chk_links 复选框由 Python 驱动；APK 单机版走纯 JS 开关
+      if (typeof window.toggleLinks === 'function') {
+        var on = window.toggleLinks();
+        showDetailToast(on ? '已显示连线' : '已隐藏连线');
+      }
+    } else if (act === 'import-dir') {
+      // SAF 选目录：Android 桥（PCBridge）弹系统目录选择器
+      if (window.PCBridge && window.PCBridge.pickDataDir) {
+        showDetailToast('正在打开目录选择器…');
+        window.PCBridge.pickDataDir();
+      } else {
+        showDetailToast('此环境不支持目录导入（非 APK）');
+      }
+    } else if (act === 'import-file') {
+      // SAF 选压缩包 / Excel：多选
+      if (window.PCBridge && window.PCBridge.pickArchive) {
+        showDetailToast('正在打开文件选择器…');
+        window.PCBridge.pickArchive();
+      } else {
+        showDetailToast('此环境不支持文件导入（非 APK）');
+      }
+    } else if (act === 'close') {
+      document.getElementById('devDetail').style.display = 'none';
+      hideQuickSearch();
+      hideContextMenu();
+      if (window._focusedLine) clearLineFocus();
+    }
+  });
+
+  // 触屏双指捏合缩放（Cesium 单指旋转 + 双指捏合缩放，原生支持）
+  // 仅需禁止 WebView 自身的默认手势冲突
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, {passive:false});
+
+  // ===== PCApp 桥回调（Android 导入/清数据后由 AndroidBridge 调）=====
+  // SAF 导入成功 → Java 端把 devices.json + devices_bundle.json 写进 filesDir/data，
+  // 前端需重新 fetch 这两个文件并渲染（bootData 只跑一次，导入后要手动重载）。
+  window.PCApp = {
+    onImportDone: function(summary) {
+      try {
+        var msg = (summary && summary.message) ? summary.message : '导入完成';
+        // 最简单可靠：整页刷新，bootData 会重新 fetch /data/devices.json
+        // （导入后设备/连线/覆盖范围全部由新的 filesDir/data 驱动）
+        if (window.showDetailToast) showDetailToast(msg + '，正在刷新…');
+        setTimeout(function(){ location.reload(); }, 800);
+      } catch (e) {
+        console.warn('PCApp.onImportDone failed:', e);
+      }
+    }
+  };
+})();
+</script>
+
+<!-- HUTOOL_OVERLAY -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>户表批量工具</title>
+<style>
+:root{
+  --bg:#f4f6f8; --card:#fff; --fg:#1c2833; --muted:#7b8794;
+  --border:#dde3e9; --accent:#f1c40f; --danger:#e74c3c; --ok:#2ecc71;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+  font-family:"Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;font-size:14px;}
+#panel{position:fixed;inset:0;z-index:8000;display:none;flex-direction:column;
+  background:var(--bg);overflow:hidden;}
+#panel.open{display:flex;}
+
+/* 顶栏 */
+#topbar{display:flex;align-items:center;gap:10px;padding:12px 14px;
+  background:var(--fg);color:#fff;flex:0 0 auto;}
+#topbar .t{font-size:17px;font-weight:bold;}
+#topbar .s{font-size:11px;color:#9fb0c0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#closeBtn{background:transparent;border:0;color:#fff;font-size:26px;line-height:1;
+  padding:4px 10px;min-width:44px;min-height:44px;}
+
+/* 内容区 */
+#body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px;}
+
+/* 卡片 */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:12px;margin-bottom:12px;}
+.card h3{margin:0 0 10px;font-size:14px;font-weight:bold;}
+.card .hint{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6;}
+
+/* 行 */
+.row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.row label{font-size:12px;color:var(--muted);flex:0 0 76px;}
+#rootPath{flex:1;background:#fbfcfd;border:1px solid var(--border);border-radius:4px;
+  padding:8px;font-size:12px;color:var(--fg);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.btn{border:1px solid var(--border);background:#e9eef3;color:var(--fg);
+  border-radius:5px;padding:9px 14px;font-size:13px;min-height:44px;
+  font-family:inherit;white-space:nowrap;}
+.btn:active{background:#dde5ec;}
+.btn.primary{background:var(--accent);border-color:var(--accent);font-weight:bold;color:var(--fg);}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:bold;}
+.btn:disabled{opacity:.45;}
+
+/* 功能按钮 */
+.fn{display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;}
+.fn .ft{font-size:14px;font-weight:bold;display:block;}
+.fn .fd{font-size:11px;color:var(--muted);font-weight:normal;margin-top:3px;line-height:1.5;}
+
+/* 复选框 */
+.chk{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.6;
+  margin-bottom:8px;padding:8px;background:#fbfcfd;border:1px solid var(--border);border-radius:5px;}
+.chk input{width:20px;height:20px;flex:0 0 20px;margin:0;}
+
+/* 进度 */
+#statusbar{display:flex;align-items:center;gap:10px;padding:8px 12px;
+  background:var(--card);border-top:1px solid var(--border);flex:0 0 auto;}
+#statusTxt{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#progTxt{font-size:12px;color:var(--muted);}
+#pb{flex:0 0 90px;height:8px;background:#eef1f4;border-radius:4px;overflow:hidden;}
+#pbFill{height:100%;width:0;background:var(--accent);border-radius:4px;transition:width .2s;}
+
+/* 日志 */
+#logCard{flex:1;display:flex;flex-direction:column;margin-bottom:0;padding:10px;}
+#logCard h3{margin:0 0 8px;}
+#log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fbfcfd;
+  border:1px solid var(--border);border-radius:4px;padding:8px;
+  font-family:Consolas,monospace;font-size:11px;line-height:1.6;
+  white-space:pre-wrap;word-break:break-all;min-height:120px;}
+#log:empty::before{content:"（暂无日志）";color:var(--muted);}
+
+/* 悬浮入口：挂在移动端的 #fab-group 里（与 搜索/全览/重置 并列） */
+#hutoolFabEntry{background:var(--accent);color:var(--fg);}
+
+</style>
+</head>
+<body>
+
+<!-- 户表批量工具面板 -->
+<div id="panel">
+  <div id="topbar">
+    <span class="t">户表批量工具</span>
+    <span class="s" id="subTitle">批量生成客户档案 / 批量修改安卓表</span>
+    <button id="closeBtn" onclick="HutoolUI.close()">×</button>
+  </div>
+
+  <div id="body">
+    <!-- 卡片1：路径设置 -->
+    <div class="card">
+      <h3>路径设置</h3>
+      <div class="row">
+        <label>待处理根目录</label>
+        <div id="rootPath">（未选择）</div>
+        <button class="btn" onclick="HutoolUI.pickRoot()">浏览…</button>
+      </div>
+      <div class="row">
+        <label>客户档案模板</label>
+        <div id="rootPath2" style="flex:1;font-size:11px;color:var(--muted);word-break:break-all;">—</div>
+      </div>
+      <div class="hint">只处理根目录下的第一层子文件夹；客户档案模板已内置，不可更改。</div>
+    </div>
+
+    <!-- 卡片2：功能 -->
+    <div class="card">
+      <h3>功能</h3>
+      <button class="btn primary fn" id="btnGen" onclick="HutoolUI.run('gen')">
+        <span class="ft">功能 ①　批量生成客户档案</span>
+        <span class="fd">按内置模板生成每个子文件夹的「&lt;文件夹名&gt;用户.xls」，数据取自同目录 .xlsx</span>
+      </button>
+      <button class="btn primary fn" id="btnMod" onclick="HutoolUI.run('mod')">
+        <span class="ft">功能 ②　批量修改安卓表</span>
+        <span class="fd">把每个子文件夹「*安卓.xls」中设备名称列的「0杆」改成文件夹名，原地保存</span>
+      </button>
+      <button class="btn primary fn" id="btnPdf" onclick="HutoolUI.run('pdf')">
+        <span class="ft">功能 ③　提取整理 PDF</span>
+        <span class="fd">把根目录及各子文件夹内的全部 PDF 移到根目录下「打印」子目录</span>
+      </button>
+      <button class="btn primary fn" id="btnColl" onclick="HutoolUI.run('coll')">
+        <span class="ft">功能 ④　准备采集软件数据</span>
+        <span class="fd">把各台区「*安卓.xls」原样复制到 _采集软件数据\&lt;台区名&gt;\，供采集软件读</span>
+      </button>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="btn danger" id="btnStop" onclick="HutoolUI.stop()" style="flex:1;">停止</button>
+        <button class="btn" id="btnClear" onclick="HutoolUI.clearLog()" style="flex:1;">清空日志</button>
+      </div>
+
+      <label class="chk">
+        <input type="checkbox" id="chkKeep" checked>
+        <span>未匹配记录保留电能表条形码、其余列留空，排在客户档案最后（不勾选则整条跳过）</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" id="chkColl" checked>
+        <span>同时为《电力信息采集外业》采集软件保留一份「0杆」原样的副本（放到根目录 _采集软件数据\，采集软件靠「0杆」识别母杆）</span>
+      </label>
+    </div>
+
+    <!-- 日志 -->
+    <div class="card" id="logCard">
+      <h3>运行日志</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div id="statusbar">
+    <div id="statusTxt">就绪</div>
+    <div id="pb"><div id="pbFill"></div></div>
+    <div id="progTxt"></div>
+  </div>
+</div>
+
+<!-- 悬浮入口 -->
+<button id="fab" onclick="HutoolUI.open()" title="户表批量工具">📋</button>
+
+<script>
+(function () {
+  "use strict";
+  var B = (typeof HutoolBridge !== "undefined") ? HutoolBridge : null;
+
+  var UI = {
+    $: function (id) { return document.getElementById(id); },
+    timer: null,
+
+    open: function () {
+      this.$("panel").classList.add("open");
+      this.refreshTpl();
+      this.startPoll();
+    },
+    close: function () {
+      this.$("panel").classList.remove("open");
+      this.stopPoll();
+    },
+    toggle: function () {
+      var p = this.$("panel");
+      if (p.classList.contains("open")) this.close(); else this.open();
+    },
+
+    refreshTpl: function () {
+      if (!B) return;
+      var t = "";
+      try { t = B.templatePath(); } catch (e) { t = ""; }
+      this.$("rootPath2").textContent = t ? (t + "（内置，不可更改）") : "⚠ 找不到模板文件";
+    },
+
+    pickRoot: function () {
+      if (!B) { alert("户表批量工具不可用"); return; }
+      B.pickRoot();
+      this.setStatus("正在读取所选目录…");
+    },
+
+    setRoot: function (path) {
+      this.$("rootPath").textContent = path || "（未选择）";
+      if (path) this.setStatus("已选择：" + path);
+    },
+
+    setStatus: function (t) { this.$("statusTxt").textContent = t; },
+
+    appendLog: function (text) {
+      var el = this.$("log");
+      el.textContent += text;
+      el.scrollTop = el.scrollHeight;
+    },
+
+    clearLog: function () { this.$("log").textContent = ""; },
+
+    setProgress: function (done, total) {
+      var pct = total > 0 ? Math.min(100, done * 100 / total) : 0;
+      this.$("pbFill").style.width = pct + "%";
+      this.$("progTxt").textContent = done + " / " + total;
+    },
+
+    setBusy: function (busy) {
+      var ids = ["btnGen", "btnMod", "btnPdf", "btnColl"];
+      for (var i = 0; i < ids.length; i++) this.$(ids[i]).disabled = busy;
+      this.$("chkKeep").disabled = busy;
+      this.$("chkColl").disabled = busy;
+      this.$("btnStop").disabled = !busy;
+    },
+
+    run: function (kind) {
+      if (!B) { alert("户表批量工具不可用"); return; }
+      if (B.isBusy()) { alert("已有任务正在运行，请等待完成。"); return; }
+
+      var root = "";
+      try { root = B.rootPath(); } catch (e) { root = ""; }
+      if (!root) { alert("请先选择待处理根目录"); return; }
+
+      var ok = true;
+      if (kind === "gen") {
+        ok = confirm("将处理 " + root + " 下的所有子文件夹，\n生成「<文件夹名>用户.xls」。\n\n继续吗？");
+        if (ok) B.runGenerate();
+      } else if (kind === "mod") {
+        ok = confirm("将修改 " + root + " 下子文件夹中的「*安卓.xls」，\n把「0杆」改为文件夹名，原地保存。\n\n继续吗？");
+        if (ok) B.runModify();
+      } else if (kind === "pdf") {
+        ok = confirm("将把 " + root + " 及其子文件夹内的全部 PDF，\n移动到 " + root + "\\打印\\。\n\n继续吗？");
+        if (ok) B.runCollectPdf();
+      } else if (kind === "coll") {
+        ok = confirm("将把 " + root + " 下各台区的「*安卓.xls」原样复制到\n" + root + "\\_采集软件数据\\。\n\n继续吗？");
+        if (ok) B.runPrepareCollector();
+      }
+      if (ok) {
+        this.setBusy(true);
+        this.setStatus("正在处理…");
+      }
+    },
+
+    stop: function () {
+      if (!B) return;
+      B.stop();
+      this.setStatus("正在停止…");
+    },
+
+    startPoll: function () {
+      this.stopPoll();
+      var self = this;
+      this.timer = setInterval(function () { self.poll(); }, 400);
+    },
+    stopPoll: function () {
+      if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    },
+
+    poll: function () {
+      if (!B) return;
+      try {
+        var logs = B.drainLogs();
+        if (logs) this.appendLog(logs);
+
+        var pr = B.progress();
+        if (pr) {
+          var a = pr.split(",");
+          this.setProgress(parseInt(a[0], 10) || 0, parseInt(a[1], 10) || 0);
+        }
+
+        var de = B.doneEvent();
+        if (de) {
+          var p = de.split("|");
+          this.setBusy(false);
+          this.setStatus(p[0] + " — " + (p[1] || ""));
+          this.$("pbFill").style.width = "0%";
+          this.$("progTxt").textContent = "";
+          alert(p[0] + "\n" + (p[1] || ""));
+        }
+
+        var root = B.rootPath();
+        if (root && this.$("rootPath").textContent.indexOf("未选择") !== -1) {
+          this.setRoot(root);
+        }
+      } catch (e) { /* 桥不可用 */ }
+    }
+  };
+
+  window.HutoolUI = UI;
+
+  // 供 MainActivity / 其他脚本调用
+  window.hutoolSetRoot = function (p) { UI.setRoot(p); };
+
+  // 入口按钮：注入到移动端的 #fab-group（与 搜索/全览/重置 并列）
+  function ensureEntry() {
+    var group = document.getElementById("fab-group");
+    if (!group) {
+      // 移动端 overlay 还没注入，退回独立悬浮按钮
+      var fab = document.getElementById("hutoolFab");
+      if (!fab) {
+        fab = document.createElement("button");
+        fab.id = "hutoolFab";
+        fab.title = "户表批量工具";
+        fab.textContent = "📋";
+        fab.style.cssText = "position:fixed;right:10px;bottom:120px;z-index:7500;" +
+          "width:46px;height:46px;border-radius:50%;background:#f1c40f;color:#1c2833;" +
+          "border:0;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.35);";
+        fab.onclick = function () { UI.toggle(); };
+        document.body.appendChild(fab);
+      }
+      return;
+    }
+    if (document.getElementById("hutoolFabEntry")) return;
+    var b = document.createElement("button");
+    b.className = "fab";
+    b.id = "hutoolFabEntry";
+    b.title = "户表批量工具";
+    b.innerHTML = '📋<span class="fab-tip">户表</span>';
+    b.onclick = function () { UI.toggle(); };
+    group.appendChild(b);
+    group.classList.add("show");
+  }
+
+  function boot() {
+    ensureEntry();
+    // 移动端 overlay 是稍后注入的，重试几次
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (document.getElementById("fab-group") || tries > 20) {
+        clearInterval(iv);
+        ensureEntry();
+      }
+    }, 300);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
+
+</body>
+</html>

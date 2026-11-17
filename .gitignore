@@ -1,52 +1,41 @@
-# ---- 构建产物 / 中间文件 ----
-build/
+# ---- 构建产物 / 大文件（走 GitHub Releases 附件，不进 git 历史） ----
 dist/
-__pycache__/
-*.py[cod]
-*.spec.bak
-.pe/
-.pytest_cache/
-.mypy_cache/
-
-# ---- 大体积发布物（走 GitHub Releases 附件，不进 git 历史）----
-# exe / apk 由 build_apk.py + PyInstaller 生成，单次提交后不再变更
-*.apk
+build/
 *.exe
-!apk/app/src/main/assets/template/*.xls
+*.apk
+*.apk.idsig
+*.aab
 
-# ---- 签名材料（绝不入库）----
+# ---- 签名密钥（绝不入库） ----
+release.keystore
 *.keystore
 *.jks
 key.properties
-keystore.properties
 
-# ---- 本地数据 / 缓存 ----
-data/*.json
-data/**/*.json
-cache/
-*.log
-_peek/
-desktop_out/
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
 
-# ---- Android 构建中间物 ----
-apk/.gradle/
-apk/local.properties
+# ---- Android / Gradle ----
 apk/app/build/
 apk/build/
-apk/captures/
-.externalNativeBuild/
-.cxx/
-
-# ---- build_apk.py 自动同步的产物副本（每次构建重新生成）----
-apk/app/src/main/assets/web/
-apk/app/src/main/assets/tiles/
-apk/app/src/main/assets/icons/
-
-# ---- IDE / 系统 ----
-.vscode/
+apk/.gradle/
+apk/local.properties
+*.iml
 .idea/
-*.swp
-Thumbs.db
-desktop.ini
+
+# ---- 运行时 / 本地数据 ----
+cache/
+data/*.json
+!data/.gitkeep
+_apk_dist/
+_peek/
+*.log
+*.tmp
 .DS_Store
-$RECYCLE.BIN/
+Thumbs.db
