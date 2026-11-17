@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ===== 存储权限（真机导入 Excel/压缩包必需）===== -->
+    <!-- SAF 选目录本身不需要运行时权限，但老机型(6-10)弹选择器/部分 ROM 会检查这些；
+         加上可显著提升兼容性。targetSdk 35 时以下两项在运行时仍需动态申请。 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+                     android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+                     android:maxSdkVersion="32" />
+    <!-- Android 11+：全设备存储管理（用户需去系统设置手动授权，SAF 选目录无需此权限，
+         但作为导入"打开数据目录"的兜底通道）。maxSdk 限制到 30，避免 Android 11+ 误触发 -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+                     android:maxSdkVersion="30" />
+    <!-- Android 13+(API 33+)：READ_EXTERNAL_STORAGE 被 READ_MEDIA_* 取代，但媒体权限
+         管的是图片/视频/音频，Excel 走 SAF 不需要。保留空占位注释。 -->
+
+    <!-- Cesium 需要 WebGL → 必须硬件加速 -->
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:largeHeap="true"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+        <!-- ===== 版权信息（晨曦网络工作室 / 重庆亦静怡动电子商务有限公司）===== -->
+        <!-- 安装器/应用市场可读取这些 meta-data 展示版权 -->
+        <meta-data android:name="app.copyright"
+                   android:value="© 晨曦网络工作室 · 重庆亦静怡动电子商务有限公司" />
+        <meta-data android:name="app.licensor"
+                   android:value="晨曦网络工作室  重庆亦静怡动电子商务有限公司" />
+        <meta-data android:name="app.vendor"
+                   android:value="晨曦网络工作室（Chongqing Yijing Yidong E-Commerce Co., Ltd.）" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"
+            android:screenOrientation="sensorLandscape"
+            android:resizeableActivity="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

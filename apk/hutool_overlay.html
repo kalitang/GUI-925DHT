@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>户表批量工具</title>
+<style>
+:root{
+  --bg:#f4f6f8; --card:#fff; --fg:#1c2833; --muted:#7b8794;
+  --border:#dde3e9; --accent:#f1c40f; --danger:#e74c3c; --ok:#2ecc71;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+  font-family:"Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;font-size:14px;}
+#panel{position:fixed;inset:0;z-index:8000;display:none;flex-direction:column;
+  background:var(--bg);overflow:hidden;}
+#panel.open{display:flex;}
+
+/* 顶栏 */
+#topbar{display:flex;align-items:center;gap:10px;padding:12px 14px;
+  background:var(--fg);color:#fff;flex:0 0 auto;}
+#topbar .t{font-size:17px;font-weight:bold;}
+#topbar .s{font-size:11px;color:#9fb0c0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#closeBtn{background:transparent;border:0;color:#fff;font-size:26px;line-height:1;
+  padding:4px 10px;min-width:44px;min-height:44px;}
+
+/* 内容区 */
+#body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px;}
+
+/* 卡片 */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:12px;margin-bottom:12px;}
+.card h3{margin:0 0 10px;font-size:14px;font-weight:bold;}
+.card .hint{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.6;}
+
+/* 行 */
+.row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.row label{font-size:12px;color:var(--muted);flex:0 0 76px;}
+#rootPath{flex:1;background:#fbfcfd;border:1px solid var(--border);border-radius:4px;
+  padding:8px;font-size:12px;color:var(--fg);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.btn{border:1px solid var(--border);background:#e9eef3;color:var(--fg);
+  border-radius:5px;padding:9px 14px;font-size:13px;min-height:44px;
+  font-family:inherit;white-space:nowrap;}
+.btn:active{background:#dde5ec;}
+.btn.primary{background:var(--accent);border-color:var(--accent);font-weight:bold;color:var(--fg);}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff;font-weight:bold;}
+.btn:disabled{opacity:.45;}
+
+/* 功能按钮 */
+.fn{display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 12px;}
+.fn .ft{font-size:14px;font-weight:bold;display:block;}
+.fn .fd{font-size:11px;color:var(--muted);font-weight:normal;margin-top:3px;line-height:1.5;}
+
+/* 复选框 */
+.chk{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.6;
+  margin-bottom:8px;padding:8px;background:#fbfcfd;border:1px solid var(--border);border-radius:5px;}
+.chk input{width:20px;height:20px;flex:0 0 20px;margin:0;}
+
+/* 进度 */
+#statusbar{display:flex;align-items:center;gap:10px;padding:8px 12px;
+  background:var(--card);border-top:1px solid var(--border);flex:0 0 auto;}
+#statusTxt{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#progTxt{font-size:12px;color:var(--muted);}
+#pb{flex:0 0 90px;height:8px;background:#eef1f4;border-radius:4px;overflow:hidden;}
+#pbFill{height:100%;width:0;background:var(--accent);border-radius:4px;transition:width .2s;}
+
+/* 日志 */
+#logCard{flex:1;display:flex;flex-direction:column;margin-bottom:0;padding:10px;}
+#logCard h3{margin:0 0 8px;}
+#log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fbfcfd;
+  border:1px solid var(--border);border-radius:4px;padding:8px;
+  font-family:Consolas,monospace;font-size:11px;line-height:1.6;
+  white-space:pre-wrap;word-break:break-all;min-height:120px;}
+#log:empty::before{content:"（暂无日志）";color:var(--muted);}
+
+/* 悬浮入口：挂在移动端的 #fab-group 里（与 搜索/全览/重置 并列） */
+#hutoolFabEntry{background:var(--accent);color:var(--fg);}
+
+</style>
+</head>
+<body>
+
+<!-- 户表批量工具面板 -->
+<div id="panel">
+  <div id="topbar">
+    <span class="t">户表批量工具</span>
+    <span class="s" id="subTitle">批量生成客户档案 / 批量修改安卓表</span>
+    <button id="closeBtn" onclick="HutoolUI.close()">×</button>
+  </div>
+
+  <div id="body">
+    <!-- 卡片1：路径设置 -->
+    <div class="card">
+      <h3>路径设置</h3>
+      <div class="row">
+        <label>待处理根目录</label>
+        <div id="rootPath">（未选择）</div>
+        <button class="btn" onclick="HutoolUI.pickRoot()">浏览…</button>
+      </div>
+      <div class="row">
+        <label>客户档案模板</label>
+        <div id="rootPath2" style="flex:1;font-size:11px;color:var(--muted);word-break:break-all;">—</div>
+      </div>
+      <div class="hint">只处理根目录下的第一层子文件夹；客户档案模板已内置，不可更改。</div>
+    </div>
+
+    <!-- 卡片2：功能 -->
+    <div class="card">
+      <h3>功能</h3>
+      <button class="btn primary fn" id="btnGen" onclick="HutoolUI.run('gen')">
+        <span class="ft">功能 ①　批量生成客户档案</span>
+        <span class="fd">按内置模板生成每个子文件夹的「&lt;文件夹名&gt;用户.xls」，数据取自同目录 .xlsx</span>
+      </button>
+      <button class="btn primary fn" id="btnMod" onclick="HutoolUI.run('mod')">
+        <span class="ft">功能 ②　批量修改安卓表</span>
+        <span class="fd">把每个子文件夹「*安卓.xls」中设备名称列的「0杆」改成文件夹名，原地保存</span>
+      </button>
+      <button class="btn primary fn" id="btnPdf" onclick="HutoolUI.run('pdf')">
+        <span class="ft">功能 ③　提取整理 PDF</span>
+        <span class="fd">把根目录及各子文件夹内的全部 PDF 移到根目录下「打印」子目录</span>
+      </button>
+      <button class="btn primary fn" id="btnColl" onclick="HutoolUI.run('coll')">
+        <span class="ft">功能 ④　准备采集软件数据</span>
+        <span class="fd">把各台区「*安卓.xls」原样复制到 _采集软件数据\&lt;台区名&gt;\，供采集软件读</span>
+      </button>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="btn danger" id="btnStop" onclick="HutoolUI.stop()" style="flex:1;">停止</button>
+        <button class="btn" id="btnClear" onclick="HutoolUI.clearLog()" style="flex:1;">清空日志</button>
+      </div>
+
+      <label class="chk">
+        <input type="checkbox" id="chkKeep" checked>
+        <span>未匹配记录保留电能表条形码、其余列留空，排在客户档案最后（不勾选则整条跳过）</span>
+      </label>
+      <label class="chk">
+        <input type="checkbox" id="chkColl" checked>
+        <span>同时为《电力信息采集外业》采集软件保留一份「0杆」原样的副本（放到根目录 _采集软件数据\，采集软件靠「0杆」识别母杆）</span>
+      </label>
+    </div>
+
+    <!-- 日志 -->
+    <div class="card" id="logCard">
+      <h3>运行日志</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div id="statusbar">
+    <div id="statusTxt">就绪</div>
+    <div id="pb"><div id="pbFill"></div></div>
+    <div id="progTxt"></div>
+  </div>
+</div>
+
+<!-- 悬浮入口 -->
+<button id="fab" onclick="HutoolUI.open()" title="户表批量工具">📋</button>
+
+<script>
+(function () {
+  "use strict";
+  var B = (typeof HutoolBridge !== "undefined") ? HutoolBridge : null;
+
+  var UI = {
+    $: function (id) { return document.getElementById(id); },
+    timer: null,
+
+    open: function () {
+      this.$("panel").classList.add("open");
+      this.refreshTpl();
+      this.startPoll();
+    },
+    close: function () {
+      this.$("panel").classList.remove("open");
+      this.stopPoll();
+    },
+    toggle: function () {
+      var p = this.$("panel");
+      if (p.classList.contains("open")) this.close(); else this.open();
+    },
+
+    refreshTpl: function () {
+      if (!B) return;
+      var t = "";
+      try { t = B.templatePath(); } catch (e) { t = ""; }
+      this.$("rootPath2").textContent = t ? (t + "（内置，不可更改）") : "⚠ 找不到模板文件";
+    },
+
+    pickRoot: function () {
+      if (!B) { alert("户表批量工具不可用"); return; }
+      B.pickRoot();
+      this.setStatus("正在读取所选目录…");
+    },
+
+    setRoot: function (path) {
+      this.$("rootPath").textContent = path || "（未选择）";
+      if (path) this.setStatus("已选择：" + path);
+    },
+
+    setStatus: function (t) { this.$("statusTxt").textContent = t; },
+
+    appendLog: function (text) {
+      var el = this.$("log");
+      el.textContent += text;
+      el.scrollTop = el.scrollHeight;
+    },
+
+    clearLog: function () { this.$("log").textContent = ""; },
+
+    setProgress: function (done, total) {
+      var pct = total > 0 ? Math.min(100, done * 100 / total) : 0;
+      this.$("pbFill").style.width = pct + "%";
+      this.$("progTxt").textContent = done + " / " + total;
+    },
+
+    setBusy: function (busy) {
+      var ids = ["btnGen", "btnMod", "btnPdf", "btnColl"];
+      for (var i = 0; i < ids.length; i++) this.$(ids[i]).disabled = busy;
+      this.$("chkKeep").disabled = busy;
+      this.$("chkColl").disabled = busy;
+      this.$("btnStop").disabled = !busy;
+    },
+
+    run: function (kind) {
+      if (!B) { alert("户表批量工具不可用"); return; }
+      if (B.isBusy()) { alert("已有任务正在运行，请等待完成。"); return; }
+
+      var root = "";
+      try { root = B.rootPath(); } catch (e) { root = ""; }
+      if (!root) { alert("请先选择待处理根目录"); return; }
+
+      var ok = true;
+      if (kind === "gen") {
+        ok = confirm("将处理 " + root + " 下的所有子文件夹，\n生成「<文件夹名>用户.xls」。\n\n继续吗？");
+        if (ok) B.runGenerate();
+      } else if (kind === "mod") {
+        ok = confirm("将修改 " + root + " 下子文件夹中的「*安卓.xls」，\n把「0杆」改为文件夹名，原地保存。\n\n继续吗？");
+        if (ok) B.runModify();
+      } else if (kind === "pdf") {
+        ok = confirm("将把 " + root + " 及其子文件夹内的全部 PDF，\n移动到 " + root + "\\打印\\。\n\n继续吗？");
+        if (ok) B.runCollectPdf();
+      } else if (kind === "coll") {
+        ok = confirm("将把 " + root + " 下各台区的「*安卓.xls」原样复制到\n" + root + "\\_采集软件数据\\。\n\n继续吗？");
+        if (ok) B.runPrepareCollector();
+      }
+      if (ok) {
+        this.setBusy(true);
+        this.setStatus("正在处理…");
+      }
+    },
+
+    stop: function () {
+      if (!B) return;
+      B.stop();
+      this.setStatus("正在停止…");
+    },
+
+    startPoll: function () {
+      this.stopPoll();
+      var self = this;
+      this.timer = setInterval(function () { self.poll(); }, 400);
+    },
+    stopPoll: function () {
+      if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    },
+
+    poll: function () {
+      if (!B) return;
+      try {
+        var logs = B.drainLogs();
+        if (logs) this.appendLog(logs);
+
+        var pr = B.progress();
+        if (pr) {
+          var a = pr.split(",");
+          this.setProgress(parseInt(a[0], 10) || 0, parseInt(a[1], 10) || 0);
+        }
+
+        var de = B.doneEvent();
+        if (de) {
+          var p = de.split("|");
+          this.setBusy(false);
+          this.setStatus(p[0] + " — " + (p[1] || ""));
+          this.$("pbFill").style.width = "0%";
+          this.$("progTxt").textContent = "";
+          alert(p[0] + "\n" + (p[1] || ""));
+        }
+
+        var root = B.rootPath();
+        if (root && this.$("rootPath").textContent.indexOf("未选择") !== -1) {
+          this.setRoot(root);
+        }
+      } catch (e) { /* 桥不可用 */ }
+    }
+  };
+
+  window.HutoolUI = UI;
+
+  // 供 MainActivity / 其他脚本调用
+  window.hutoolSetRoot = function (p) { UI.setRoot(p); };
+
+  // 入口按钮：注入到移动端的 #fab-group（与 搜索/全览/重置 并列）
+  function ensureEntry() {
+    var group = document.getElementById("fab-group");
+    if (!group) {
+      // 移动端 overlay 还没注入，退回独立悬浮按钮
+      var fab = document.getElementById("hutoolFab");
+      if (!fab) {
+        fab = document.createElement("button");
+        fab.id = "hutoolFab";
+        fab.title = "户表批量工具";
+        fab.textContent = "📋";
+        fab.style.cssText = "position:fixed;right:10px;bottom:120px;z-index:7500;" +
+          "width:46px;height:46px;border-radius:50%;background:#f1c40f;color:#1c2833;" +
+          "border:0;font-size:20px;box-shadow:0 4px 14px rgba(0,0,0,.35);";
+        fab.onclick = function () { UI.toggle(); };
+        document.body.appendChild(fab);
+      }
+      return;
+    }
+    if (document.getElementById("hutoolFabEntry")) return;
+    var b = document.createElement("button");
+    b.className = "fab";
+    b.id = "hutoolFabEntry";
+    b.title = "户表批量工具";
+    b.innerHTML = '📋<span class="fab-tip">户表</span>';
+    b.onclick = function () { UI.toggle(); };
+    group.appendChild(b);
+    group.classList.add("show");
+  }
+
+  function boot() {
+    ensureEntry();
+    // 移动端 overlay 是稍后注入的，重试几次
+    var tries = 0;
+    var iv = setInterval(function () {
+      tries++;
+      if (document.getElementById("fab-group") || tries > 20) {
+        clearInterval(iv);
+        ensureEntry();
+      }
+    }, 300);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>

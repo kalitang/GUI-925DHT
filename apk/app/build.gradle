@@ -1,0 +1,90 @@
+plugins {
+    id 'com.android.application'
+}
+
+// ============ 发布签名（免费自签名，key.properties）============
+// 加载 apk/key.properties（含 storeFile/密码/alias）
+// 若文件不存在则回退到 debug 签名（仍可安装测试）
+def keystoreProps = null
+if (file('../key.properties').exists()) {
+    keystoreProps = new Properties()
+    keystoreProps.load(new FileInputStream(file('../key.properties')))
+}
+
+android {
+    namespace 'com.power.collector'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.power.collector"
+        minSdk 26
+        targetSdk 35
+        versionCode 2
+        versionName "1.1"
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProps != null) {
+                storeFile      = rootProject.file(keystoreProps['storeFile'])
+                storePassword = keystoreProps['storePassword']
+                keyAlias      = keystoreProps['keyAlias']
+                keyPassword   = keystoreProps['keyPassword']
+            } else {
+                // 无 key.properties 时退回 debug 签名
+                storeFile     = file("${System.getenv('ANDROID_HOME')}/debug.keystore")
+                keyAlias      = 'androiddebugkey'
+                storePassword = 'android'
+                keyPassword   = 'android'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 用 release 签名配置（来自 key.properties 的免费自签名）
+            signingConfig = signingConfigs.release
+        }
+        debug {
+            // debug 保持系统 debug 签名，便于本地调试
+            signingConfig = null
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // assets 压缩策略
+    //
+    // 说明：assets/tiles/*.bin 是瓦片（已经是 jpeg，不需要再压缩）。
+    // 若不在 noCompress 列表里，AGP 会把它们当"未知类型资源"启用
+    // 资源分块（4KB page 对齐），在 APK 内产生 83MB 的重复 local header
+    // （实测：条目数据只 60MB，文件却有 145MB）。
+    // 显式声明 bin 不压缩后由 zipalign 统一处理，不再重复。
+    androidResources {
+        noCompress.clear()
+        noCompress.addAll(['js', 'wasm', 'json', 'png', 'jpg', 'svg',
+                           'css', 'gif', 'woff', 'woff2', 'bin'])
+    }
+
+    // 导入功能需要 Apache POI（解析 xls/xlsx）+ commons-compress（7z/tar）
+    // + junrar（rar）。全部以本地 jar 方式引入，构建不依赖网络。
+    dependencies {
+        implementation fileTree(dir: 'libs', include: ['*.jar'])
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/*', 'META-INF/DEPENDENCIES',
+                         'META-INF/LICENSE', 'META-INF/NOTICE', '**/*.txt']
+        }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

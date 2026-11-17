@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 电力低压数据采集 应用图标：深蓝底 + 黄色闪电 + 电网杆 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 背景圆角方块 -->
+    <path
+        android:pathData="M0,0h108v108h-108z"
+        android:fillColor="#141E30" />
+
+    <!-- 内层圆角 -->
+    <path
+        android:pathData="M16,16h76v76h-76z"
+        android:fillColor="#1C2B44" />
+
+    <!-- 电网杆（横担） -->
+    <path
+        android:pathData="M30,38h48v4h-48z"
+        android:fillColor="#8FA3BF" />
+    <path
+        android:pathData="M51,38h6v34h-6z"
+        android:fillColor="#8FA3BF" />
+    <!-- 横担支柱 -->
+    <path
+        android:pathData="M38,30h4v12h-4z"
+        android:fillColor="#8FA3BF" />
+    <path
+        android:pathData="M66,30h4v12h-4z"
+        android:fillColor="#8FA3BF" />
+
+    <!-- 闪电 -->
+    <path
+        android:pathData="M58,44 L38,66 L50,66 L46,84 L68,60 L55,60 Z"
+        android:fillColor="#F1C40F" />
+
+</vector>

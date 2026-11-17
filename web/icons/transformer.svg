@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- A 类：变压器（0.4 千伏低压） — 俯视 + 立面组合示意，红橙色 -->
+  <g fill="none" stroke="#FF4500" stroke-width="3" stroke-linecap="round">
+    <!-- 变压器主体：圆柱 -->
+    <ellipse cx="32" cy="22" rx="14" ry="6" fill="#FF4500" fill-opacity="0.15"/>
+    <rect x="18" y="22" width="28" height="24" fill="#FF4500" fill-opacity="0.25" stroke="none"/>
+    <ellipse cx="32" cy="46" rx="14" ry="6"/>
+    <ellipse cx="32" cy="22" rx="14" ry="6"/>
+    <!-- 高压引线 -->
+    <line x1="20" y1="10" x2="20" y2="18"/>
+    <line x1="32" y1="6"  x2="32" y2="18"/>
+    <line x1="44" y1="10" x2="44" y2="18"/>
+    <!-- 低压侧线圈波纹 -->
+    <path d="M18,32 Q26,28 32,32 Q38,36 46,32" stroke-width="2"/>
+    <path d="M18,38 Q26,34 32,38 Q38,42 46,38" stroke-width="2"/>
+  </g>
+  <!-- 中心红点标记（俯视定位） -->
+  <circle cx="32" cy="34" r="4" fill="#FF4500"/>
+</svg>

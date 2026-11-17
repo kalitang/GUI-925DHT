@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置：APK 内置本地 HTTP 服务走 http://127.0.0.1:<随机端口>，
+  Android 9(API 28)+ 默认禁止明文流量，必须显式放行 localhost。
+  其它域名（卫星瓦片 https://server.arcgisonline.com）仍走 HTTPS，不受影响。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

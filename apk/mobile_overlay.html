@@ -1,0 +1,146 @@
+<!-- ============================================================
+     电力低压数据采集 — 移动端触屏增强（APK / 手机浏览器通用）
+     由 build_apk.py 在打包时自动注入 index.html
+     ============================================================ -->
+
+<style>
+  /* === 移动端：悬浮大按钮（触屏 44px+ 触控目标）=== */
+  @media (pointer: coarse), (max-width: 820px) {
+    #hotkey-hint { display:none !important; }         /* 键盘提示在触屏上无用 */
+    #btn-ip-locate {
+      top:auto; bottom:64px; right:10px;              /* 移到右下悬浮组上方 */
+      font-size:14px; padding:10px 16px; min-width:48px; min-height:48px;
+      display:flex; align-items:center; gap:6px;
+    }
+    #compass { bottom:64px; right:120px; width:90px; } /* 让位给悬浮按钮组 */
+    /* 放大所有可点元素触控目标 */
+    #devDetail .dev-detail-actions button { min-height:44px; font-size:13px; padding:8px 10px; }
+    #quick-search { width:min(480px, 92vw); }
+    #quick-search input { min-height:44px; font-size:15px; }
+    #quick-search .results .item { min-height:44px; font-size:14px; padding:8px 10px; }
+    #devDetail { width:min(360px, 88vw); font-size:14px; }
+    /* 比例尺缩小避免挡按钮 */
+    #scalebar { font-size:10px; bottom:10px; }
+  }
+
+  /* === 悬浮按钮组（触屏主控件）=== */
+  #fab-group {
+    position:absolute; right:10px; bottom:12px; z-index:25;
+    display:none; flex-direction:column; gap:8px;
+  }
+  #fab-group.show { display:flex; }
+  .fab {
+    width:48px; height:48px; border-radius:50%;
+    background:rgba(20,30,48,0.88); color:#fff;
+    border:1px solid rgba(241,196,15,0.45);
+    box-shadow:0 4px 14px rgba(0,0,0,0.45);
+    font-size:20px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-tap-highlight-color:rgba(241,196,15,0.4);
+    touch-action:manipulation;                 /* 触屏：直接响应，无双击缩放延迟 */
+  }
+  .fab:active { background:rgba(241,196,15,0.35); transform:scale(0.94); }
+  .fab .fab-tip {
+    position:absolute; right:56px; top:50%; transform:translateY(-50%);
+    background:rgba(20,30,48,0.92); color:#fff; font-size:12px;
+    padding:3px 8px; border-radius:4px; white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .15s;
+  }
+  .fab:hover .fab-tip { opacity:1; }
+
+  /* 搜索输入面板放大 */
+  @media (pointer: coarse) {
+    #quick-search .hint { font-size:12px; }
+    #quick-search .results { max-height:40vh; }
+  }
+
+  /* 触屏双击设备 = 聚焦台区（Cesium 默认双击缩放禁用后补充） */
+  html, body { touch-action:none; overscroll-behavior:none; }
+  #cesiumContainer canvas { touch-action:none; }
+</style>
+
+<!-- 悬浮按钮组 -->
+<div id="fab-group">
+  <button class="fab" data-fab="search" title="搜索设备 / 台区 / 经纬度">🔍<span class="fab-tip">搜索</span></button>
+  <button class="fab" data-fab="fit" title="聚焦所有设备">⊙<span class="fab-tip">全览</span></button>
+  <button class="fab" data-fab="reset" title="重置视角">↺<span class="fab-tip">重置</span></button>
+  <button class="fab" data-fab="labels" title="显示/隐藏设备名称">Aa<span class="fab-tip">名称</span></button>
+  <button class="fab" data-fab="links" title="显示/隐藏连线">∿<span class="fab-tip">连线</span></button>
+  <button class="fab" data-fab="import-dir" title="打开数据目录（选文件夹）">📂<span class="fab-tip">选目录</span></button>
+  <button class="fab" data-fab="import-file" title="导入压缩包 / Excel 文件">📦<span class="fab-tip">导入文件</span></button>
+  <button class="fab" data-fab="close" title="关闭弹窗">✕<span class="fab-tip">关闭</span></button>
+</div>
+
+<script>
+(function initMobileControls() {
+  // 仅触屏设备启用悬浮按钮组
+  var coarse = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+             || ('ontouchstart' in window);
+  if (coarse) document.getElementById('fab-group').classList.add('show');
+
+  var fab = document.getElementById('fab-group');
+  fab.addEventListener('click', function(e) {
+    var b = e.target.closest('.fab');
+    if (!b) return;
+    var act = b.dataset.fab;
+    if (act === 'search') {
+      showQuickSearch();
+    } else if (act === 'fit') {
+      PowerAPI.fitAll();
+      showDetailToast('已聚焦全部设备');
+    } else if (act === 'reset') {
+      resetView();
+    } else if (act === 'labels') {
+      toggleLabels();
+    } else if (act === 'links') {
+      // 桌面版 chk_links 复选框由 Python 驱动；APK 单机版走纯 JS 开关
+      if (typeof window.toggleLinks === 'function') {
+        var on = window.toggleLinks();
+        showDetailToast(on ? '已显示连线' : '已隐藏连线');
+      }
+    } else if (act === 'import-dir') {
+      // SAF 选目录：Android 桥（PCBridge）弹系统目录选择器
+      if (window.PCBridge && window.PCBridge.pickDataDir) {
+        showDetailToast('正在打开目录选择器…');
+        window.PCBridge.pickDataDir();
+      } else {
+        showDetailToast('此环境不支持目录导入（非 APK）');
+      }
+    } else if (act === 'import-file') {
+      // SAF 选压缩包 / Excel：多选
+      if (window.PCBridge && window.PCBridge.pickArchive) {
+        showDetailToast('正在打开文件选择器…');
+        window.PCBridge.pickArchive();
+      } else {
+        showDetailToast('此环境不支持文件导入（非 APK）');
+      }
+    } else if (act === 'close') {
+      document.getElementById('devDetail').style.display = 'none';
+      hideQuickSearch();
+      hideContextMenu();
+      if (window._focusedLine) clearLineFocus();
+    }
+  });
+
+  // 触屏双指捏合缩放（Cesium 单指旋转 + 双指捏合缩放，原生支持）
+  // 仅需禁止 WebView 自身的默认手势冲突
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, {passive:false});
+
+  // ===== PCApp 桥回调（Android 导入/清数据后由 AndroidBridge 调）=====
+  // SAF 导入成功 → Java 端把 devices.json + devices_bundle.json 写进 filesDir/data，
+  // 前端需重新 fetch 这两个文件并渲染（bootData 只跑一次，导入后要手动重载）。
+  window.PCApp = {
+    onImportDone: function(summary) {
+      try {
+        var msg = (summary && summary.message) ? summary.message : '导入完成';
+        // 最简单可靠：整页刷新，bootData 会重新 fetch /data/devices.json
+        // （导入后设备/连线/覆盖范围全部由新的 filesDir/data 驱动）
+        if (window.showDetailToast) showDetailToast(msg + '，正在刷新…');
+        setTimeout(function(){ location.reload(); }, 800);
+      } catch (e) {
+        console.warn('PCApp.onImportDone failed:', e);
+      }
+    }
+  };
+})();
+</script>

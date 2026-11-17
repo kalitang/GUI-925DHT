@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <ellipse cx="32" cy="56" rx="10" ry="2" fill="rgba(0,0,0,0.3)"/>
+  <!-- pole -->
+  <rect x="30" y="14" width="4" height="40" fill="#6b4423"/>
+  <!-- bracket -->
+  <rect x="20" y="18" width="24" height="3" fill="#6b4423"/>
+  <!-- connection point (blue diamond) -->
+  <polygon points="32,8 44,20 32,32 20,20" fill="#2980b9" stroke="#1a5276" stroke-width="1.5"/>
+  <polygon points="32,12 40,20 32,28 24,20" fill="#5dade2" opacity="0.6"/>
+  <text x="32" y="24" font-family="Arial,sans-serif" font-weight="bold" font-size="9" fill="#fff" text-anchor="middle">J</text>
+</svg>
