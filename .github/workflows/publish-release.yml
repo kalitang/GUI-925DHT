@@ -1,0 +1,52 @@
+name: 发布 Release 附件
+
+# 由 push 'release-assets-*' tag 触发。
+# 附件本体放在 release-assets 分支，本 workflow 检出该分支后上传为 Release 资产。
+on:
+  push:
+    tags:
+      - 'release-assets-*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: 创建 Release 并上传 EXE / APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出附件分支
+        uses: actions/checkout@v4
+        with:
+          ref: release-assets
+          path: assets
+          lfs: false
+
+      - name: 校验附件
+        run: |
+          set -e
+          ls -la assets/release/
+          test -f "assets/release/电力低压数据采集软件.exe"
+          test -f "assets/release/电力低压数据采集软件.apk"
+          sha256sum assets/release/* | tee assets/release/SHA256SUMS.txt
+
+      - name: 创建 Release 并上传附件
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          cd assets/release
+          # 若 release 已存在则删除重建，保证附件干净
+          if gh release view v1.1.0 >/dev/null 2>&1; then
+            gh release delete v1.1.0 --yes --cleanup-tag
+          fi
+          gh release create v1.1.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "电力专业低压数据采集软件 v1.1.0" \
+            --notes-file NOTES.md \
+            --target main \
+            "电力低压数据采集软件.exe" \
+            "电力低压数据采集软件.apk" \
+            "SHA256SUMS.txt"
+          echo "--- 发布结果 ---"
+          gh release view v1.1.0 --repo "$GITHUB_REPOSITORY"
