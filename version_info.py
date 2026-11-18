@@ -13,9 +13,9 @@ from PyInstaller.utils.win32.versioninfo import (
 # 公司/版权（晨曦网络工作室 · 重庆亦静怡动电子商务有限公司）
 _COMPANY   = '晨曦网络工作室  重庆亦静怡动电子商务有限公司'
 _COPYRIGHT = u'© 晨曦网络工作室  重庆亦静怡动电子商务有限公司  All rights reserved.'
-_PRODUCT   = u'电力低压数据采集软件'
-_FILEDESC  = u'电力低压数据采集软件（3D 地球 + ArcGIS 卫星影像 + Excel 自动设备识别 + 拓扑层级）'
-_ORIGNAME  = '电力低压数据采集软件.exe'
+_PRODUCT   = u'EIAS 电力低压信息采集'
+_FILEDESC  = u'EIAS 电力低压信息采集系统（3D 地球 + ArcGIS 卫星影像 + Excel 自动设备识别 + 拓扑层级）'
+_ORIGNAME  = 'EIAS.exe'
 
 info = VSVersionInfo(
     kids=[
@@ -23,11 +23,11 @@ info = VSVersionInfo(
             StringTable('040904B0', [   # 简体中文 (0409) + 代码页 1200(0x04B0)
                 StringStruct('CompanyName',  _COMPANY),
                 StringStruct('FileDescription', _FILEDESC),
-                StringStruct('FileVersion',     '1.1.1.0'),
+                StringStruct('FileVersion',     '1.2.0.0'),
                 StringStruct('LegalCopyright',  _COPYRIGHT),
                 StringStruct('OriginalFilename', _ORIGNAME),
                 StringStruct('ProductName',     _PRODUCT),
-                StringStruct('ProductVersion',  '1.1.1.0'),
+                StringStruct('ProductVersion',  '1.2.0.0'),
                 StringStruct('InternalName',    'powercollector'),
             ]),
         ]),
@@ -36,8 +36,8 @@ info = VSVersionInfo(
         ]),
     ],
     ffi=FixedFileInfo(
-        filevers=(1, 1, 1, 0),
-        prodvers=(1, 1, 1, 0),
+        filevers=(1, 2, 0, 0),
+        prodvers=(1, 2, 0, 0),
         mask=0x3f,
         flags=0,
         OS=0x00040000,     # 64-bit

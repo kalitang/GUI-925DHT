@@ -1,0 +1,12 @@
+# EIAS 版本号统一管理
+# 每次修改与深化后：自动 +1 修订号（小改动 x.y.z+1 / 新功能 x.y+1.0 / 破坏性 x+1.0.0）
+# 然后同步到：
+#   - main.py        窗口标题 + 关于框  "EIAS 电力低压信息采集  v<VER>"
+#   - version_info.py  EXE 元数据 FileVersion/ProductVersion <VER>.0 + filevers/prodvers
+#   - packaging.spec  EXE 名 EIAS
+#   - apk/app/build.gradle  versionName "<VER>" versionCode 递增
+#   - apk/app/src/main/res/values/strings.xml  app_name "EIAS"
+#   - web/index.html  <title>
+#
+# 当前版本：
+1.2.0

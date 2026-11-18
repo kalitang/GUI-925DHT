@@ -81,7 +81,7 @@ exe = EXE(
     a.datas,
     [],
     exclude_binaries=False,
-    name='电力低压数据采集软件',
+    name='EIAS',
     debug=False,
     strip=False,
     upx=False,
@@ -103,5 +103,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='电力低压数据采集软件',
+    name='EIAS',
 )

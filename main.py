@@ -1,4 +1,4 @@
-"""电力专业低压数据采集软件 - 主程序
+"""EIAS（电力低压信息采集系统）- 主程序
 - PySide6 主窗口（菜单 + 工具栏 + 数据表 + Cesium 3D 地球）
 - 自动检查并安装依赖
 - 自动启动本地瓦片代理（断网可用）
@@ -197,7 +197,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("电力专业低压数据采集软件  v1.1.1")
+        self.setWindowTitle("EIAS 电力低压信息采集  v1.2.0")
         self.resize(1400, 850)
         self.setWindowIcon(self._make_app_icon())
 
@@ -793,7 +793,7 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         QMessageBox.about(self, "关于",
-            "<h3>电力专业低压数据采集软件 v1.1.1</h3>"
+            "<h3>EIAS 电力低压信息采集 v1.2.0</h3>"
             "<p>3D 地球 + ArcGIS 卫星影像 + 本地瓦片缓存</p>"
             "<p>技术栈：PySide6 + CesiumJS + ArcGIS World Imagery</p>"
             "<p>支持：WGS84 / 缩放至 19 级 / 3D 旋转 / 真实星空 / 太阳跟随时区</p>"
