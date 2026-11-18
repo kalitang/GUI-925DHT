@@ -11,14 +11,14 @@
 | 版本 | 载体 | 下载 |
 |------|------|------|
 | **GUI 源码版** | Python 源码 | 克隆本仓库后 `python main.py` |
-| **Windows EXE 版** | 单文件 EXE（175 MB） | [v1.exe](https://github.com/kalitang/GUI-925DHT/releases/download/v1.1.0/v1.exe) 直接下载 |
-| **Android APK 版** | APK（67 MB） | [v1.apk](https://github.com/kalitang/GUI-925DHT/releases/download/v1.1.0/v1.apk) 直接下载 |
+| **Windows EXE 版** | 单文件 EXE（175 MB） | [EIAS_v1.2.0.exe](https://github.com/kalitang/GUI-925DHT/releases/download/v1.2.0/EIAS_v1.2.0.exe) 直接下载 |
+| **Android APK 版** | APK（62.7 MB） | [EIAS_v1.2.0.apk](https://github.com/kalitang/GUI-925DHT/releases/download/v1.2.0/EIAS_v1.2.0.apk) 直接下载 |
 
 - EXE 版免安装，双击即用；内置《低压客户模板.xls》。
 - APK 版已用 v2 方案签名，Android 7.0+ 可直接安装；使用「导入压缩包」或「打开目录」加载数据。
 - 直接下载链接（国内可达，走 GitHub Release CDN）：
-  - EXE：<https://github.com/kalitang/GUI-925DHT/releases/download/v1.1.0/v1.exe>
-  - APK：<https://github.com/kalitang/GUI-925DHT/releases/download/v1.1.0/v1.apk>
+  - EXE：<https://github.com/kalitang/GUI-925DHT/releases/download/v1.2.0/EIAS_v1.2.0.exe>
+  - APK：<https://github.com/kalitang/GUI-925DHT/releases/download/v1.2.0/EIAS_v1.2.0.apk>
 
 > ⚠️ EXE / APK 体积较大，作为 **Release 附件**分发，不进 git 历史，保持仓库轻量。
 
