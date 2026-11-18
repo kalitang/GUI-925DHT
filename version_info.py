@@ -23,11 +23,11 @@ info = VSVersionInfo(
             StringTable('040904B0', [   # 简体中文 (0409) + 代码页 1200(0x04B0)
                 StringStruct('CompanyName',  _COMPANY),
                 StringStruct('FileDescription', _FILEDESC),
-                StringStruct('FileVersion',     '1.1.0.0'),
+                StringStruct('FileVersion',     '1.1.1.0'),
                 StringStruct('LegalCopyright',  _COPYRIGHT),
                 StringStruct('OriginalFilename', _ORIGNAME),
                 StringStruct('ProductName',     _PRODUCT),
-                StringStruct('ProductVersion',  '1.1.0.0'),
+                StringStruct('ProductVersion',  '1.1.1.0'),
                 StringStruct('InternalName',    'powercollector'),
             ]),
         ]),
@@ -36,8 +36,8 @@ info = VSVersionInfo(
         ]),
     ],
     ffi=FixedFileInfo(
-        filevers=(1, 1, 0, 0),
-        prodvers=(1, 1, 0, 0),
+        filevers=(1, 1, 1, 0),
+        prodvers=(1, 1, 1, 0),
         mask=0x3f,
         flags=0,
         OS=0x00040000,     # 64-bit

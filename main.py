@@ -197,7 +197,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("电力专业低压数据采集软件  v1.0")
+        self.setWindowTitle("电力专业低压数据采集软件  v1.1.1")
         self.resize(1400, 850)
         self.setWindowIcon(self._make_app_icon())
 
@@ -793,7 +793,7 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         QMessageBox.about(self, "关于",
-            "<h3>电力专业低压数据采集软件 v1.1</h3>"
+            "<h3>电力专业低压数据采集软件 v1.1.1</h3>"
             "<p>3D 地球 + ArcGIS 卫星影像 + 本地瓦片缓存</p>"
             "<p>技术栈：PySide6 + CesiumJS + ArcGIS World Imagery</p>"
             "<p>支持：WGS84 / 缩放至 19 级 / 3D 旋转 / 真实星空 / 太阳跟随时区</p>"
