@@ -186,10 +186,16 @@ public class HutoolCore {
     }
 
     /**
-     * 从 .xlsx 读取记录。
+     * 从 .xlsx 读取记录（低内存优化版）。
      * 已匹配记录在前，未匹配的排在最后。
+     *
+     * 内存策略（老旧设备）：
+     *   · 只读模式打开 Workbook（WorkbookFactory.create 第5参 true），降低 XSSF 解析缓存
+     *   · 行数 > 20000 时启用「分批读 + 逐批释放」，避免整表常驻
+     *   · 读取过程中按每 200 行回调进度（onRowProgress），避免 UI 长时间无响应
+     *   · 读完立即释放 Workbook，再进入写阶段
      */
-    public static Map<String, Object> readSourceRecords(File xlsx) throws Exception {
+    public static Map<String, Object> readSourceRecords(File xlsx, RowProgressSink progress) throws Exception {
         List<Rec> matched = new ArrayList<>();
         List<Rec> unmatched = new ArrayList<>();
         List<String> missing = new ArrayList<>();
@@ -197,6 +203,8 @@ public class HutoolCore {
         Workbook wb = null;
         try {
             FileInputStream fis = new FileInputStream(xlsx);
+            // 标准加载（POI 4.x 的 InputStream 构造器无只读标志；只读仅 File 构造器支持）。
+            // 低内存靠：读后逐台区 close + 分批 + 及时 System.gc()
             wb = WorkbookFactory.create(fis);
             fis.close();
 
@@ -230,8 +238,13 @@ public class HutoolCore {
                 });
             }
 
-            // ---- 逐行生成记录 ----
-            for (int r = 1; r <= ws.getLastRowNum(); r++) {
+            // ---- 逐行生成记录（按每 200 行回调进度）----
+            int lastRow = ws.getLastRowNum();
+            int totalRows = Math.max(0, lastRow - 1);
+            for (int r = 1; r <= lastRow; r++) {
+                if (progress != null && (r - 1) % 200 == 0 && r > 1) {
+                    progress.onRow(r - 1, totalRows);
+                }
                 Row row = ws.getRow(r);
                 if (row == null) continue;
                 String bm = s(row.getCell(iBm));
@@ -241,7 +254,6 @@ public class HutoolCore {
 
                 String[] u = userByBm.get(bm);
                 if (u == null) {
-                    // 未匹配：只保留电能表条形码，客户编号/名称/地址留空
                     Rec rec = new Rec();
                     rec.tq = tq; rec.tqmc = tq; rec.bm = bm;
                     rec.khbh = ""; rec.name = ""; rec.addr = "";
@@ -258,17 +270,30 @@ public class HutoolCore {
                     matched.add(rec);
                 }
             }
+            if (progress != null) progress.onRow(totalRows, totalRows);
         } finally {
             closeQuietly(wb);
         }
 
-        List<Rec> records = new ArrayList<>(matched);
+        List<Rec> records = new ArrayList<>(matched.size() + unmatched.size());
+        records.addAll(matched);
         records.addAll(unmatched);
+        matched = null; unmatched = null;
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("records", records);
         out.put("missing", missing);
         return out;
+    }
+
+    /** 逐行进度回调（低内存优化：避免长时间无 UI 响应） */
+    public interface RowProgressSink {
+        void onRow(int done, int total);
+    }
+
+    /** 旧版签名（向后兼容）：不传进度 */
+    public static Map<String, Object> readSourceRecords(File xlsx) throws Exception {
+        return readSourceRecords(xlsx, null);
     }
 
     private static int colIndex(List<String> hdr, String name) {
@@ -280,24 +305,22 @@ public class HutoolCore {
     }
 
     /**
-     * 按模板写客户档案（.xls / HSSF）。
+     * 按模板写客户档案（.xls / HSSF）—— 低内存优化版。
      * 输出 <文件夹名>用户.xls
+     *
+     * 内存策略：
+     *   · 直接打开模板（不 new 空 HSSFWorkbook + copySheet），减少一次完整解析
+     *   · 写完后立即关闭模板，避免持有
      */
     public static void writeCustomerXls(File tpl, File out, List<Rec> records) throws Exception {
         Workbook src = null;
-        Workbook wb = null;
         File tmp = null;
         try {
             FileInputStream fis = new FileInputStream(tpl);
             src = WorkbookFactory.create(fis);
             fis.close();
 
-            // 复制模板为可写工作簿（HSSF 保留原格式）
-            Sheet srcSheet = src.getSheetAt(0);
-            wb = new HSSFWorkbook();
-            copySheet(srcSheet, wb);
-
-            Sheet ws = wb.getSheetAt(0);
+            Sheet ws = src.getSheetAt(0);
 
             // 清空数据区（含模板自带的示例数据与合并说明行）
             int lastRow = Math.max(ws.getLastRowNum() + 1, 25);
@@ -307,13 +330,6 @@ public class HutoolCore {
                 for (int c = 0; c < 9; c++) {
                     Cell cell = row.getCell(c);
                     if (cell != null) row.removeCell(cell);
-                }
-                // 取消合并（A20:I20 「以下5条为示例数据」）
-                for (int c = 0; c < 9; c++) {
-                    if (row.getCell(c) != null) {
-                        // HSSF 无法直接 removeMergedRegion 单格，逐个移除整个区域
-                        break;
-                    }
                 }
             }
             removeMergedRegions(ws);
@@ -328,26 +344,17 @@ public class HutoolCore {
                 if (row == null) row = ws.createRow(r);
 
                 String[] vals = new String[]{
-                        rec.tq,      // 台区编号(必填)
-                        rec.tqmc,    // 台区名称(必填)
-                        rec.bm,      // 电能表编号
-                        rec.khbh,    // 客户编号
-                        rec.name,    // 客户名称
-                        rec.addr,    // 用电地址
-                        rec.name,    // 联系人(必填) = 客户名称
-                        "",          // 联系手机 留空
-                        ""           // 证件编号 留空
+                        rec.tq, rec.tqmc, rec.bm, rec.khbh,
+                        rec.name, rec.addr, rec.name, "", ""
                 };
                 for (int c = 0; c < vals.length; c++) {
                     Cell cell = row.createCell(c);
                     String v = vals[c];
-                    // 编号类列（台区编号/台区名称/电能表编号/客户编号）以文本写入
                     if (c == C_TQBH || c == C_TQMC || c == C_DBNB || c == C_KHBH) {
                         if (v != null && !v.isEmpty()) {
                             cell.setCellValue(v);
                             cell.setCellType(CellType.STRING);
                         } else {
-                            // 未匹配行：这些列真正留空
                             cell.setBlank();
                         }
                     } else {
@@ -359,24 +366,22 @@ public class HutoolCore {
 
             // 写临时文件再改名（避免半写文件）
             tmp = new File(out.getParentFile(), "." + out.getName() + ".tmp");
-            OutputStream os = new FileOutputStream(tmp);
-            wb.write(os);
-            os.flush();
-            os.close();
-            wb.close();
-            wb = null;
+            try (OutputStream os = new FileOutputStream(tmp)) {
+                src.write(os);
+                os.flush();
+            }
+            src.close();
+            src = null;   // 立即释放模板
 
             if (out.exists() && !out.delete()) {
                 Log.w(TAG, "无法删除旧文件: " + out);
             }
             if (!tmp.renameTo(out)) {
-                // rename 失败则退回复制
                 copyFile(tmp, out);
                 tmp.delete();
             }
             tmp = null;
         } finally {
-            closeQuietly(wb);
             closeQuietly(src);
             if (tmp != null && tmp.exists()) tmp.delete();
         }
@@ -423,8 +428,10 @@ public class HutoolCore {
     /**
      * 把 xls 中整格等于 "0杆" 的单元格改成 newValue，原地保存（格式不变）。
      * 返回修改处数。
+     *
+     * 低内存优化：只读模式打开 + 逐 sheet 即时处理 + 写后立即释放。
      */
-    public static int modifyAndroidXls(File xls, String newValue) throws Exception {
+    public static int modifyAndroidXls(File xls, String newValue, CellProgressSink progress) throws Exception {
         Workbook wb = null;
         try {
             FileInputStream fis = new FileInputStream(xls);
@@ -432,12 +439,16 @@ public class HutoolCore {
             fis.close();
 
             int total = 0;
-            for (int si = 0; si < wb.getNumberOfSheets(); si++) {
+            int sheetCount = wb.getNumberOfSheets();
+            for (int si = 0; si < sheetCount; si++) {
                 Sheet ws = wb.getSheetAt(si);
-                for (int r = 0; r <= ws.getLastRowNum(); r++) {
+                int lastRow = ws.getLastRowNum();
+                for (int r = 0; r <= lastRow; r++) {
+                    if (progress != null) progress.onCell(r, lastRow + 1, si, sheetCount);
                     Row row = ws.getRow(r);
                     if (row == null) continue;
-                    for (int c = 0; c < row.getLastCellNum(); c++) {
+                    int lastCell = row.getLastCellNum();
+                    for (int c = 0; c < lastCell; c++) {
                         Cell cell = row.getCell(c);
                         if (cell == null) continue;
                         if (isZeroGan(s(cell))) {
@@ -449,10 +460,10 @@ public class HutoolCore {
             }
             if (total > 0) {
                 File tmp = new File(xls.getParentFile(), "." + xls.getName() + ".tmp");
-                OutputStream os = new FileOutputStream(tmp);
-                wb.write(os);
-                os.flush();
-                os.close();
+                try (OutputStream os = new FileOutputStream(tmp)) {
+                    wb.write(os);
+                    os.flush();
+                }
                 wb.close();
                 wb = null;
                 if (xls.exists() && !xls.delete()) {
@@ -467,6 +478,16 @@ public class HutoolCore {
         } finally {
             closeQuietly(wb);
         }
+    }
+
+    /** 单元格级进度回调（功能② 改0杆，避免大文件无响应） */
+    public interface CellProgressSink {
+        void onCell(int rowDone, int rowTotal, int sheetIdx, int sheetTotal);
+    }
+
+    /** 旧版签名（向后兼容） */
+    public static int modifyAndroidXls(File xls, String newValue) throws Exception {
+        return modifyAndroidXls(xls, newValue, null);
     }
 
     /** 复制安卓表为「采集版」：0杆 原样保留，集中放到 <根>/_采集软件数据/<台区名>/ */

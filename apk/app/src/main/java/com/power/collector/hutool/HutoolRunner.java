@@ -121,7 +121,13 @@ public class HutoolRunner {
                                 sink.log("[失败] " + name + " — 文件夹内没有 .xlsx 源文件");
                                 continue;
                             }
-                            Map<String, Object> res = HutoolCore.readSourceRecords(xlsx);
+                            // 低内存优化：传进度回调（每 200 行回调一次，避免 UI 冻结）
+                            HutoolCore.RowProgressSink rowSink = new HutoolCore.RowProgressSink() {
+                                @Override public void onRow(int done, int totalRows) {
+                                    post("读取中 " + name + " … " + done + "/" + totalRows, null);
+                                }
+                            };
+                            Map<String, Object> res = HutoolCore.readSourceRecords(xlsx, rowSink);
                             @SuppressWarnings("unchecked")
                             List<HutoolCore.Rec> recs = (List<HutoolCore.Rec>) res.get("records");
                             @SuppressWarnings("unchecked")
@@ -140,6 +146,8 @@ public class HutoolRunner {
                             }
                             File out = new File(folder, name + "用户.xls");
                             HutoolCore.writeCustomerXls(tpl, out, recs);
+                            // 低内存优化：每处理完一个台区提示 GC（释放上一轮 POI 对象）
+                            System.gc();
                             ok++;
                             String extra = (!missing.isEmpty() && keepUnmatched)
                                     ? "（未匹配 " + missing.size() + " 条已留空写入）" : "";
@@ -202,12 +210,19 @@ public class HutoolRunner {
                             int copies = 0;
                             for (File f : files) {
                                 if (core.isStoppedNow()) break;
-                                // 先复制原样副本（0杆 保留），再改名
                                 if (keepCollectorCopy) {
                                     if (HutoolCore.makeCollectorCopy(f, name, root) != null) copies++;
                                 }
-                                modified += HutoolCore.modifyAndroidXls(f, name);
+                                HutoolCore.CellProgressSink cellSink = new HutoolCore.CellProgressSink() {
+                                    @Override public void onCell(int rowDone, int rowTotal, int sheetIdx, int sheetTotal) {
+                                        if (rowTotal > 0 && rowDone % 100 == 0) {
+                                            post("修改 " + f.getName() + " sheet" + (sheetIdx+1) + "/" + sheetTotal + " … " + rowDone + "/" + rowTotal, null);
+                                        }
+                                    }
+                                };
+                                modified += HutoolCore.modifyAndroidXls(f, name, cellSink);
                             }
+                            System.gc();
                             if (modified == 0) {
                                 skipped++;
                                 sink.log("[跳过] " + name + " — 未找到值为 '0杆' 的单元格");

@@ -317,28 +317,35 @@ Cesium.Ion.defaultAccessToken = '';
 // 保证核显/老旧电脑也能流畅；独显用户可手动切"全效"。
 // 瓦片实时加载 → 本地代理自动缓存（tile_proxy），首屏拉取后永久本地。
 
-// 自动探测显卡型号 → 决定默认档位
+// 自动探测显卡型号 + 设备内存 → 决定默认档位
+// 低内存优化：navigator.deviceMemory（GB）< 4 → 强制省资源档（老旧/低端设备）
 function detectPerfLevel() {
+  try {
+    const mem = navigator.deviceMemory;
+    if (mem !== undefined && mem > 0 && mem < 4) return 0;   // <4GB → 省资源
+    if (mem === 4) {
+      const gpu = _gpuName();
+      if (gpu && (gpu.includes('INTEL')||gpu.includes('MALI')||gpu.includes('ADRENO'))) return 0;
+      return 1;
+    }
+  } catch (e) {}
+  const gpu = _gpuName();
+  if (!gpu) return 0;
+  const g = gpu.toUpperCase();
+  if (g.includes('NVIDIA')||(g.includes('AMD')&&g.includes('RX'))||g.includes('ARC')||g.includes('RADEON')) return 2;
+  if (g.includes('INTEL')||g.includes('UHD')||g.includes('IRIS')||g.includes('HD GRAPHICS')||
+      g.includes('MALI')||g.includes('ADRENO')||g.includes('POWERVR')) return 0;
+  return 1;
+}
+function _gpuName() {
   try {
     const c = document.createElement('canvas');
     const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
-    if (!gl) return 0;   // 无 WebGL → 强制省资源
+    if (!gl) return null;
     const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    if (!ext) return 1;
-    const gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL).toUpperCase();
-    // 独显特征
-    if (gpu.includes('NVIDIA') || gpu.includes('AMD') && gpu.includes('RX') || gpu.includes('ARC') || gpu.includes('RADEON')) {
-      return 2;   // 独显 → 全效
-    }
-    // 核显特征（Intel UHD / Iris / 集成）
-    if (gpu.includes('INTEL') || gpu.includes('UHD') || gpu.includes('IRIS') || gpu.includes('HD GRAPHICS')) {
-      return 0;   // 核显 → 省资源
-    }
-    // 兜底
-    return 1;
-  } catch (e) {
-    return 0;   // 探测失败 → 省资源（保守）
-  }
+    if (!ext) return null;
+    return gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || null;
+  } catch (e) { return null; }
 }
 
 // 性能配置：所有档位都关大气/光照/阴影（这些是 GPU 大户）
@@ -346,6 +353,7 @@ function detectPerfLevel() {
 const PERF_CONFIG = {
   0: {  // 省资源（核显/老旧）：分辨率 0.6，关所有特效；星空保留（一次静态贴图，开销极低）
     resolutionScale: 0.6,
+    maxTileLevel: 14,   // 低内存优化：瓦片最大 zoom 14（省 32 倍请求）
     fxaa: false,
     msaa: 1,
     atmosphere: false,
@@ -363,6 +371,7 @@ const PERF_CONFIG = {
   },
   1: {  // 平衡：分辨率 0.85，保留基础光照 + 星空
     resolutionScale: 0.85,
+    maxTileLevel: 19,
     fxaa: false,
     msaa: 1,
     atmosphere: false,
@@ -380,6 +389,7 @@ const PERF_CONFIG = {
   },
   2: {  // 全效（独显）：全开抗锯齿 + 大气 + 阴影 + 星空
     resolutionScale: 1.0,
+    maxTileLevel: 19,
     fxaa: true,
     msaa: 4,
     atmosphere: true,
@@ -550,10 +560,12 @@ applyLocalTime();
 
 // ============== 影像底图（ArcGIS World Imagery via 本地代理）==============
 // 低内存设备：只加载一个底图层（卫星图），不再加载注记层（双倍请求太卡）
+// 低内存优化：省资源档（deviceMemory<4GB）下瓦片最大 zoom 从 19 降到 14
+const _maxTileLevel = getPerf().maxTileLevel !== undefined ? getPerf().maxTileLevel : (perfLevel === 0 ? 14 : 19);
 const baseLayer = viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
   url: `${PROXY}/imagery/{z}/{x}/{y}`,
   credit: 'Esri World Imagery (本地缓存)',
-  maximumLevel: 19,
+  maximumLevel: _maxTileLevel,
   tilingScheme: new Cesium.WebMercatorTilingScheme(),
 }));
 // labelLayer 占位（低配档不加载，仅 API 需要存在）
@@ -906,39 +918,63 @@ function _worldToScreenManual(cart, camera, W, H) {
 }
 
 // === IP 定位 + 罗盘 + 路线规划（用户 2026-09-28） ===
-// window.PC_LOCATION 由 Python 端（或 PWA 浏览器直接 fetch api.ip.sb）注入：
-//   {lon, lat, ip, city} 或 null（探测失败）
-let _ipLocationEntity = null;       // Cesium entity（蓝色 GPS 大头针）
-let _routeLineEntity = null;        // Cesium polyline（IP → 设备 的导航线）
+// window.PC_LOCATION 由 Python 端注入；PC 浏览器/APK 前端 fetch 多源重试
+let _ipLocationEntity = null;
+let _routeLineEntity = null;
 function _ipLocationToLonLat() {
-  if (window.PC_LOCATION && window.PC_LOCATION.lon != null) {
-    return window.PC_LOCATION;
-  }
+  if (window.PC_LOCATION && window.PC_LOCATION.lon != null) return window.PC_LOCATION;
   return null;
 }
 
+// === IP 定位多源重试（低内存/老旧设备优化：离线缓存 + 超时 + 错误细分）===
+// 顺序：localStorage 缓存 → ipwho.is → ip.sb → ipapi.co → ip-api.com
+const _IP_SOURCES = [
+  { url: 'https://ipwho.is/', parse: j => j.longitude != null ? { lon:+j.longitude, lat:+j.latitude, ip:j.ip||'', city:j.city||j.country||'' } : null, timeout: 8000 },
+  { url: 'https://api.ip.sb/geo-ip', parse: j => j.latitude != null ? { lon:+j.longitude, lat:+j.latitude, ip:j.ip||'', city:j.city_name||j.country_code||'' } : null, timeout: 8000 },
+  { url: 'https://ipapi.co/json/', parse: j => j.latitude != null ? { lon:+j.longitude, lat:+j.latitude, ip:j.ip||'', city:j.city||j.country_name||'' } : null, timeout: 8000 },
+  { url: 'https://ip-api.com/json/?fields=lat,lon,query,city,countryCode', parse: j => j.lat != null ? { lon:+j.lon, lat:+j.lat, ip:j.query||'', city:j.city||j.countryCode||'' } : null, timeout: 8000 },
+];
+
 async function _fetchIPLocationFrontend() {
-  if (window.PC_LOCATION && window.PC_LOCATION.lon != null) {
-    return window.PC_LOCATION;
-  }
+  if (window.PC_LOCATION && window.PC_LOCATION.lon != null) return window.PC_LOCATION;
   try {
-    const r = await fetch('https://ipwho.is/', { method: 'GET' });
-    if (r.ok) {
-      const j = await r.json();
-      if (j.longitude != null && j.latitude != null) {
-        const loc = { lon: +j.longitude, lat: +j.latitude, ip: j.ip || '', city: j.city || '' };
-        window.PC_LOCATION = loc;
-        return loc;
-      }
+    const c = localStorage.getItem('pc_ip_loc');
+    if (c) {
+      const j = JSON.parse(c);
+      if (j && j.lon != null) { window.PC_LOCATION = j; return j; }
     }
-  } catch (e) { console.warn('frontend IP locate failed:', e); }
+  } catch (e) {}
+  for (const src of _IP_SOURCES) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), src.timeout);
+      const r = await fetch(src.url, { signal: ctrl.signal, redirect: 'follow' });
+      clearTimeout(t);
+      if (r.ok) {
+        const j = await r.json();
+        const loc = src.parse(j);
+        if (loc) {
+          window.PC_LOCATION = loc;
+          try { localStorage.setItem('pc_ip_loc', JSON.stringify(loc)); } catch (e) {}
+          return loc;
+        }
+      }
+    } catch (e) {
+      console.warn('[IP] ' + src.url + ' failed: ' + e.message);
+      continue;
+    }
+  }
   return null;
 }
 
 function _flyToIPLocation() {
   _fetchIPLocationFrontend().then((loc) => {
     if (!loc) {
-      alert('IP 定位失败：请检查网络（需访问 ipwho.is）');
+      const online = navigator.onLine !== false;
+      const msg = online
+        ? 'IP 定位失败：4 个定位源均无响应（可能被运营商拦截或网络不通）。请检查网络或改用设备列表手动定位。'
+        : 'IP 定位失败：当前设备无网络连接（navigator.onLine=false）。请连接 Wi-Fi 或移动数据后重试。';
+      alert(msg);
       return;
     }
     console.log('[IP] located:', loc);

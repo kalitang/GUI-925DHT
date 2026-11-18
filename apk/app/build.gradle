@@ -42,12 +42,15 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true   // 低内存优化：R8 混淆 + 移除未用代码（POI/Cesium 瘦身）
+            shrinkResources true
             // 用 release 签名配置（来自 key.properties 的免费自签名）
             signingConfig = signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
             // debug 保持系统 debug 签名，便于本地调试
+            minifyEnabled false
             signingConfig = null
         }
     }
