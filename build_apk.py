@@ -337,6 +337,18 @@ def main():
     apks = gradle_build(variant)
     for a in apks:
         log(f"✅ {a}  ({a.stat().st_size//1024//1024} MB)")
+    # 按 VERSION 自动命名交付 APK：EIAS_v<ver>.apk
+    try:
+        import re as _re
+        ver = next((l.strip() for l in (ROOT/'VERSION').read_text(encoding='utf-8').splitlines()
+                    if l.strip() and not l.startswith('#') and _re.match(r'^\d+\.\d+\.\d+$', l.strip())), 'unknown')
+        target = ROOT / f'EIAS_v{ver}.apk'
+        if apks:
+            import shutil
+            shutil.copy2(apks[-1], target)
+            log(f"📦 交付 APK：{target.name}  ({target.stat().st_size//1024//1024} MB)")
+    except Exception as e:
+        log(f"[warn] 交付命名失败（不影响 APK 生成）：{e}")
     log(f"全部完成，耗时 {time.time()-t0:.0f}s")
 
 if __name__ == '__main__':
